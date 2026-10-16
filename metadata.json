@@ -1,0 +1,6 @@
+{
+  "name": "FrameForge",
+  "description": "Professional 2D animation studio for Android tablets featuring stylus-optimized drawing, onion skinning, multi-track timeline, character rigging, and AI motion assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

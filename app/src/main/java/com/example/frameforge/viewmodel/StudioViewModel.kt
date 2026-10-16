@@ -1,0 +1,1219 @@
+package com.example.frameforge.viewmodel
+
+import android.app.Application
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.frameforge.ai.AiMotionAssistant
+import com.example.frameforge.ai.ColorPaletteSuggestion
+import com.example.frameforge.engine.DrawingEngine
+import com.example.frameforge.engine.InverseKinematics
+import com.example.frameforge.engine.ProceduralMotion
+import com.example.frameforge.export.ProjectStorage
+import com.example.frameforge.model.AnimationLayer
+import com.example.frameforge.model.AnimationProject
+import com.example.frameforge.model.BoneKeyframe
+import com.example.frameforge.model.BonePose
+import com.example.frameforge.model.DrawingCel
+import com.example.frameforge.model.DrawingStroke
+import com.example.frameforge.model.EasingCurve
+import com.example.frameforge.model.OnionSkinConfig
+import com.example.frameforge.model.PlaybackMode
+import com.example.frameforge.model.SkeletonRig
+import com.example.frameforge.model.StrokePoint
+import com.example.frameforge.model.ToolType
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.io.File
+import java.util.Stack
+
+import com.example.frameforge.model.ActionsTab
+import com.example.frameforge.model.AdjustmentState
+import com.example.frameforge.model.AdjustmentType
+import com.example.frameforge.model.AnimationNodeGraph
+import com.example.frameforge.model.AnimationNodeType
+import com.example.frameforge.model.BlendModeType
+import com.example.frameforge.model.BrushCategory
+import com.example.frameforge.model.BrushDefinition
+import com.example.frameforge.model.CanvasResolutionPreset
+import com.example.frameforge.model.ColorPickerTab
+import com.example.frameforge.model.GraphNode
+import com.example.frameforge.model.PalmRejectionMode
+import com.example.frameforge.model.PressureCurve
+import com.example.frameforge.model.SelectionMode
+import com.example.frameforge.model.SelectionState
+import com.example.frameforge.model.TransformMode
+import com.example.frameforge.model.TransformState
+
+enum class SidePanelType {
+
+    LAYERS,
+    COLORS,
+    SKELETON_RIG,
+    AI_ASSISTANT,
+    EXPORT,
+    PROJECTS,
+    SETTINGS
+}
+
+class StudioViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val storage = ProjectStorage(application)
+
+    private val _project = MutableStateFlow(createInitialProject())
+    val project: StateFlow<AnimationProject> = _project.asStateFlow()
+
+    private val _currentFrame = MutableStateFlow(0)
+    val currentFrame: StateFlow<Int> = _currentFrame.asStateFlow()
+
+    private val _activeLayerId = MutableStateFlow("layer_sketch")
+    val activeLayerId: StateFlow<String> = _activeLayerId.asStateFlow()
+
+    private val _currentTool = MutableStateFlow(ToolType.PEN)
+    val currentTool: StateFlow<ToolType> = _currentTool.asStateFlow()
+
+    private val _brushColor = MutableStateFlow(Color(0xFF1E293B)) // Deep ink navy
+    val brushColor: StateFlow<Color> = _brushColor.asStateFlow()
+
+    private val _brushSize = MutableStateFlow(8f)
+    val brushSize: StateFlow<Float> = _brushSize.asStateFlow()
+
+    private val _brushOpacity = MutableStateFlow(1.0f)
+    val brushOpacity: StateFlow<Float> = _brushOpacity.asStateFlow()
+
+    private val _brushSmoothing = MutableStateFlow(0.4f)
+    val brushSmoothing: StateFlow<Float> = _brushSmoothing.asStateFlow()
+
+    private val _palmRejectionMode = MutableStateFlow(PalmRejectionMode.AUTOMATIC)
+    val palmRejectionMode: StateFlow<PalmRejectionMode> = _palmRejectionMode.asStateFlow()
+
+    private val _pressureCurve = MutableStateFlow(PressureCurve.LINEAR)
+    val pressureCurve: StateFlow<PressureCurve> = _pressureCurve.asStateFlow()
+
+    private val _recentColors = MutableStateFlow<List<Color>>(
+        listOf(
+            Color(0xFF1E293B), Color(0xFFE2E8F0), Color(0xFFEF4444),
+            Color(0xFF3B82F6), Color(0xFF10B981), Color(0xFFF59E0B)
+        )
+    )
+    val recentColors: StateFlow<List<Color>> = _recentColors.asStateFlow()
+
+    private val _customPalette = MutableStateFlow<List<Color>>(
+        listOf(
+            Color(0xFF000000), Color(0xFFFFFFFF), Color(0xFFFF9800),
+            Color(0xFF00E5FF), Color(0xFFE91E63), Color(0xFF4CAF50)
+        )
+    )
+    val customPalette: StateFlow<List<Color>> = _customPalette.asStateFlow()
+
+    private val _nodeGraph = MutableStateFlow(AnimationNodeGraph())
+    val nodeGraph: StateFlow<AnimationNodeGraph> = _nodeGraph.asStateFlow()
+
+    private val _isNodeGraphViewActive = MutableStateFlow(false)
+    val isNodeGraphViewActive: StateFlow<Boolean> = _isNodeGraphViewActive.asStateFlow()
+
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+    private val _playbackMode = MutableStateFlow(PlaybackMode.LOOP)
+    val playbackMode: StateFlow<PlaybackMode> = _playbackMode.asStateFlow()
+
+    private val _onionSkinConfig = MutableStateFlow(OnionSkinConfig())
+    val onionSkinConfig: StateFlow<OnionSkinConfig> = _onionSkinConfig.asStateFlow()
+
+    private val _activeSidePanel = MutableStateFlow<SidePanelType?>(null)
+    val activeSidePanel: StateFlow<SidePanelType?> = _activeSidePanel.asStateFlow()
+
+    private val _selectedBoneId = MutableStateFlow<String?>("bone_spine")
+    val selectedBoneId: StateFlow<String?> = _selectedBoneId.asStateFlow()
+
+    private val _isIkMode = MutableStateFlow(false)
+    val isIkMode: StateFlow<Boolean> = _isIkMode.asStateFlow()
+
+    private val _currentStroke = MutableStateFlow<DrawingStroke?>(null)
+    val currentStroke: StateFlow<DrawingStroke?> = _currentStroke.asStateFlow()
+
+    // Status message toast
+    private val _statusMessage = MutableStateFlow<String?>(null)
+    val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    private val _savedProjects = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val savedProjects: StateFlow<List<Pair<String, String>>> = _savedProjects.asStateFlow()
+
+    // --- PROCREATE FLOATING HUD & POPOVER STATES ---
+    private val _isActionsPopoverOpen = MutableStateFlow(false)
+    val isActionsPopoverOpen: StateFlow<Boolean> = _isActionsPopoverOpen.asStateFlow()
+
+    private val _actionsTab = MutableStateFlow(ActionsTab.ADD)
+    val actionsTab: StateFlow<ActionsTab> = _actionsTab.asStateFlow()
+
+    private val _isAdjustmentsPopoverOpen = MutableStateFlow(false)
+    val isAdjustmentsPopoverOpen: StateFlow<Boolean> = _isAdjustmentsPopoverOpen.asStateFlow()
+
+    private val _adjustmentState = MutableStateFlow(AdjustmentState())
+    val adjustmentState: StateFlow<AdjustmentState> = _adjustmentState.asStateFlow()
+
+    private val _isBrushStudioOpen = MutableStateFlow(false)
+    val isBrushStudioOpen: StateFlow<Boolean> = _isBrushStudioOpen.asStateFlow()
+
+    private val _activeBrushCategory = MutableStateFlow(BrushCategory.SKETCHING)
+    val activeBrushCategory: StateFlow<BrushCategory> = _activeBrushCategory.asStateFlow()
+
+    private val _activeBrush = MutableStateFlow(BrushDefinition.defaultBrushes().first())
+    val activeBrush: StateFlow<BrushDefinition> = _activeBrush.asStateFlow()
+
+    private val _isLayersPopoverOpen = MutableStateFlow(false)
+    val isLayersPopoverOpen: StateFlow<Boolean> = _isLayersPopoverOpen.asStateFlow()
+
+    private val _isColorPickerOpen = MutableStateFlow(false)
+    val isColorPickerOpen: StateFlow<Boolean> = _isColorPickerOpen.asStateFlow()
+
+    private val _colorPickerTab = MutableStateFlow(ColorPickerTab.DISC)
+    val colorPickerTab: StateFlow<ColorPickerTab> = _colorPickerTab.asStateFlow()
+
+    private val _isGalleryDialogOpen = MutableStateFlow(false)
+    val isGalleryDialogOpen: StateFlow<Boolean> = _isGalleryDialogOpen.asStateFlow()
+
+    private val _isReferenceCompanionOpen = MutableStateFlow(false)
+    val isReferenceCompanionOpen: StateFlow<Boolean> = _isReferenceCompanionOpen.asStateFlow()
+
+    private val _isRightHandedInterface = MutableStateFlow(false)
+    val isRightHandedInterface: StateFlow<Boolean> = _isRightHandedInterface.asStateFlow()
+
+    private val _isAnimationAssistVisible = MutableStateFlow(true)
+    val isAnimationAssistVisible: StateFlow<Boolean> = _isAnimationAssistVisible.asStateFlow()
+
+    private val _isDreamsMultiTrackVisible = MutableStateFlow(false)
+    val isDreamsMultiTrackVisible: StateFlow<Boolean> = _isDreamsMultiTrackVisible.asStateFlow()
+
+    private val _selectionState = MutableStateFlow(SelectionState())
+    val selectionState: StateFlow<SelectionState> = _selectionState.asStateFlow()
+
+    private val _transformState = MutableStateFlow(TransformState())
+    val transformState: StateFlow<TransformState> = _transformState.asStateFlow()
+
+
+    // Undo / Redo history
+    private val undoStack = Stack<AnimationProject>()
+    private val redoStack = Stack<AnimationProject>()
+
+    private var playbackJob: Job? = null
+
+    init {
+        refreshSavedProjects()
+    }
+
+    private fun createInitialProject(): AnimationProject {
+        val proj = AnimationProject(
+            name = "Studio Sequence 01",
+            totalFrames = 16,
+            fps = 12
+        )
+        // Pre-create initial cels for layers
+        val initialCels = mutableListOf<DrawingCel>()
+        proj.layers.forEach { layer ->
+            for (f in 0 until proj.totalFrames) {
+                initialCels.add(
+                    DrawingCel(
+                        frameIndex = f,
+                        layerId = layer.id,
+                        strokes = emptyList()
+                    )
+                )
+            }
+        }
+        return proj.copy(cels = initialCels)
+    }
+
+    private fun pushHistory() {
+        undoStack.push(_project.value)
+        redoStack.clear()
+        if (undoStack.size > 30) {
+            undoStack.removeAt(0)
+        }
+    }
+
+    fun undo() {
+        if (undoStack.isNotEmpty()) {
+            redoStack.push(_project.value)
+            _project.value = undoStack.pop()
+            showStatus("Undo")
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            undoStack.push(_project.value)
+            _project.value = redoStack.pop()
+            showStatus("Redo")
+        }
+    }
+
+    fun showStatus(msg: String) {
+        _statusMessage.value = msg
+        viewModelScope.launch {
+            delay(2200)
+            if (_statusMessage.value == msg) {
+                _statusMessage.value = null
+            }
+        }
+    }
+
+    // --- Tools & Color ---
+    fun setTool(tool: ToolType) {
+        _currentTool.value = tool
+    }
+
+    fun setColor(color: Color) {
+        _brushColor.value = color
+    }
+
+    fun setBrushSize(size: Float) {
+        _brushSize.value = size.coerceIn(1f, 150f)
+    }
+
+    fun setBrushOpacity(opacity: Float) {
+        _brushOpacity.value = opacity.coerceIn(0.05f, 1.0f)
+    }
+
+    fun setBrushSmoothing(smoothing: Float) {
+        _brushSmoothing.value = smoothing.coerceIn(0f, 0.95f)
+    }
+
+    fun toggleSidePanel(panel: SidePanelType) {
+        _activeSidePanel.value = if (_activeSidePanel.value == panel) null else panel
+    }
+
+    fun closeSidePanel() {
+        _activeSidePanel.value = null
+    }
+
+    // --- Drawing Stroke Handling ---
+    fun startStroke(x: Float, y: Float, pressure: Float) {
+        val stroke = DrawingStroke(
+            points = listOf(StrokePoint(x, y, pressure)),
+            colorArgb = _brushColor.value.toArgb(),
+            toolType = _currentTool.value,
+            size = _brushSize.value,
+            opacity = _brushOpacity.value,
+            smoothing = _brushSmoothing.value
+        )
+        _currentStroke.value = stroke
+    }
+
+    fun updateStroke(x: Float, y: Float, pressure: Float) {
+        val curr = _currentStroke.value ?: return
+        val updatedPoints = curr.points + StrokePoint(x, y, pressure)
+        _currentStroke.value = curr.copy(points = updatedPoints)
+    }
+
+    fun finishStroke() {
+        val stroke = _currentStroke.value ?: return
+        _currentStroke.value = null
+        if (stroke.points.isEmpty()) return
+
+        pushHistory()
+
+        val smoothedPoints = DrawingEngine.smoothPoints(stroke.points, stroke.smoothing)
+        val finalStroke = stroke.copy(points = smoothedPoints)
+
+        val frame = _currentFrame.value
+        val layerId = _activeLayerId.value
+
+        _project.update { p ->
+            val existingCel = p.cels.find { it.frameIndex == frame && it.layerId == layerId }
+            val newCels = p.cels.toMutableList()
+            if (existingCel != null) {
+                val updatedCel = existingCel.copy(strokes = existingCel.strokes + finalStroke)
+                val idx = newCels.indexOf(existingCel)
+                newCels[idx] = updatedCel
+            } else {
+                newCels.add(
+                    DrawingCel(
+                        frameIndex = frame,
+                        layerId = layerId,
+                        strokes = listOf(finalStroke)
+                    )
+                )
+            }
+            p.copy(cels = newCels, updatedAt = System.currentTimeMillis())
+        }
+    }
+
+    // --- Frame & Playback ---
+    fun setCurrentFrame(frame: Int) {
+        val clamped = frame.coerceIn(0, (_project.value.totalFrames - 1).coerceAtLeast(0))
+        _currentFrame.value = clamped
+    }
+
+    fun stepFrame(delta: Int) {
+        val total = _project.value.totalFrames
+        if (total <= 0) return
+        val next = (_currentFrame.value + delta + total) % total
+        _currentFrame.value = next
+    }
+
+    fun togglePlayback() {
+        if (_isPlaying.value) {
+            stopPlayback()
+        } else {
+            startPlayback()
+        }
+    }
+
+    private fun startPlayback() {
+        _isPlaying.value = true
+        playbackJob?.cancel()
+        playbackJob = viewModelScope.launch {
+            val fps = _project.value.fps.coerceIn(1, 60)
+            val frameDelay = (1000L / fps).coerceAtLeast(16L)
+            var forward = true
+
+            while (isActive && _isPlaying.value) {
+                delay(frameDelay)
+                val total = _project.value.totalFrames
+                if (total <= 1) continue
+
+                val curr = _currentFrame.value
+                when (_playbackMode.value) {
+                    PlaybackMode.LOOP -> {
+                        _currentFrame.value = (curr + 1) % total
+                    }
+                    PlaybackMode.ONCE -> {
+                        if (curr + 1 >= total) {
+                            _isPlaying.value = false
+                            break
+                        } else {
+                            _currentFrame.value = curr + 1
+                        }
+                    }
+                    PlaybackMode.PING_PONG -> {
+                        if (forward) {
+                            if (curr + 1 >= total) {
+                                forward = false
+                                _currentFrame.value = curr - 1
+                            } else {
+                                _currentFrame.value = curr + 1
+                            }
+                        } else {
+                            if (curr - 1 < 0) {
+                                forward = true
+                                _currentFrame.value = curr + 1
+                            } else {
+                                _currentFrame.value = curr - 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopPlayback() {
+        _isPlaying.value = false
+        playbackJob?.cancel()
+        playbackJob = null
+    }
+
+    fun setFps(fps: Int) {
+        val clamped = fps.coerceIn(1, 60)
+        _project.update { it.copy(fps = clamped) }
+        showStatus("Playback FPS set to $clamped")
+    }
+
+    fun addFrame() {
+        pushHistory()
+        _project.update { p ->
+            val newTotal = p.totalFrames + 1
+            p.copy(totalFrames = newTotal)
+        }
+        _currentFrame.value = _project.value.totalFrames - 1
+        showStatus("Added frame #${_currentFrame.value + 1}")
+    }
+
+    fun duplicateCurrentFrame() {
+        pushHistory()
+        val curr = _currentFrame.value
+        _project.update { p ->
+            val currCels = p.cels.filter { it.frameIndex == curr }
+            val newTotal = p.totalFrames + 1
+
+            // Shift cels that are past current frame
+            val shifted = p.cels.map {
+                if (it.frameIndex > curr) it.copy(frameIndex = it.frameIndex + 1) else it
+            }.toMutableList()
+
+            // Copy current cels to curr + 1
+            currCels.forEach { cel ->
+                shifted.add(
+                    cel.copy(
+                        id = java.util.UUID.randomUUID().toString(),
+                        frameIndex = curr + 1
+                    )
+                )
+            }
+
+            p.copy(totalFrames = newTotal, cels = shifted)
+        }
+        _currentFrame.value = curr + 1
+        showStatus("Duplicated frame #${curr + 1}")
+    }
+
+    fun clearCurrentCel() {
+        pushHistory()
+        val frame = _currentFrame.value
+        val layerId = _activeLayerId.value
+        _project.update { p ->
+            val updated = p.cels.map {
+                if (it.frameIndex == frame && it.layerId == layerId) it.copy(strokes = emptyList()) else it
+            }
+            p.copy(cels = updated)
+        }
+        showStatus("Cleared cel on active layer")
+    }
+
+    fun deleteCurrentFrame() {
+        if (_project.value.totalFrames <= 1) {
+            showStatus("Cannot delete only remaining frame")
+            return
+        }
+        pushHistory()
+        val curr = _currentFrame.value
+        _project.update { p ->
+            val filtered = p.cels.filter { it.frameIndex != curr }.map {
+                if (it.frameIndex > curr) it.copy(frameIndex = it.frameIndex - 1) else it
+            }
+            p.copy(totalFrames = p.totalFrames - 1, cels = filtered)
+        }
+        if (_currentFrame.value >= _project.value.totalFrames) {
+            _currentFrame.value = _project.value.totalFrames - 1
+        }
+        showStatus("Deleted frame")
+    }
+
+    // --- Onion Skinning ---
+    fun toggleOnionSkin() {
+        _onionSkinConfig.update { it.copy(enabled = !it.enabled) }
+        showStatus(if (_onionSkinConfig.value.enabled) "Onion Skin ON" else "Onion Skin OFF")
+    }
+
+    fun setOnionSkinConfig(config: OnionSkinConfig) {
+        _onionSkinConfig.value = config
+    }
+
+    // --- Layers ---
+    fun setActiveLayer(layerId: String) {
+        _activeLayerId.value = layerId
+    }
+
+    fun addLayer(name: String = "Layer ${_project.value.layers.size + 1}") {
+        pushHistory()
+        val newLayer = AnimationLayer(name = name)
+        _project.update { p ->
+            p.copy(layers = p.layers + newLayer)
+        }
+        _activeLayerId.value = newLayer.id
+        showStatus("Added $name")
+    }
+
+    fun toggleLayerVisibility(layerId: String) {
+        _project.update { p ->
+            p.copy(layers = p.layers.map {
+                if (it.id == layerId) it.copy(isVisible = !it.isVisible) else it
+            })
+        }
+    }
+
+    fun toggleLayerLock(layerId: String) {
+        _project.update { p ->
+            p.copy(layers = p.layers.map {
+                if (it.id == layerId) it.copy(isLocked = !it.isLocked) else it
+            })
+        }
+    }
+
+    fun setLayerOpacity(layerId: String, opacity: Float) {
+        _project.update { p ->
+            p.copy(layers = p.layers.map {
+                if (it.id == layerId) it.copy(opacity = opacity.coerceIn(0f, 1f)) else it
+            })
+        }
+    }
+
+    fun deleteLayer(layerId: String) {
+        if (_project.value.layers.size <= 1) {
+            showStatus("Cannot delete the only layer")
+            return
+        }
+        pushHistory()
+        _project.update { p ->
+            p.copy(
+                layers = p.layers.filter { it.id != layerId },
+                cels = p.cels.filter { it.layerId != layerId }
+            )
+        }
+        if (_activeLayerId.value == layerId) {
+            _activeLayerId.value = _project.value.layers.first().id
+        }
+        showStatus("Layer deleted")
+    }
+
+    // --- Rigging & Bones ---
+    fun setSelectedBone(boneId: String?) {
+        _selectedBoneId.value = boneId
+    }
+
+    fun toggleIkMode() {
+        _isIkMode.update { !it }
+        showStatus(if (_isIkMode.value) "IK Mode ON" else "FK Mode ON")
+    }
+
+    fun rotateSelectedBone(deltaDeg: Float) {
+        val boneId = _selectedBoneId.value ?: return
+        val currPose = getCurrentFramePose()
+        val currAngle = currPose.boneAnglesDeg[boneId] ?: 0f
+        val newAngles = currPose.boneAnglesDeg.toMutableMap()
+        newAngles[boneId] = currAngle + deltaDeg
+        savePoseToCurrentFrame(currPose.copy(boneAnglesDeg = newAngles))
+    }
+
+    fun setBoneAngle(boneId: String, angleDeg: Float) {
+        val currPose = getCurrentFramePose()
+        val newAngles = currPose.boneAnglesDeg.toMutableMap()
+        newAngles[boneId] = angleDeg
+        savePoseToCurrentFrame(currPose.copy(boneAnglesDeg = newAngles))
+    }
+
+    fun solveIkForLimb(targetX: Float, targetY: Float) {
+        val boneId = _selectedBoneId.value ?: return
+        val rig = _project.value.boneRig
+        val currPose = getCurrentFramePose()
+
+        val (upperId, lowerId) = when (boneId) {
+            "bone_arm_r_low", "bone_arm_r_up" -> Pair("bone_arm_r_up", "bone_arm_r_low")
+            "bone_arm_l_low", "bone_arm_l_up" -> Pair("bone_arm_l_up", "bone_arm_l_low")
+            "bone_leg_r_low", "bone_leg_r_up" -> Pair("bone_leg_r_up", "bone_leg_r_low")
+            "bone_leg_l_low", "bone_leg_l_up" -> Pair("bone_leg_l_up", "bone_leg_l_low")
+            else -> return
+        }
+
+        val updatedPose = InverseKinematics.solveTwoBoneIK(
+            rig = rig,
+            currentPose = currPose,
+            upperBoneId = upperId,
+            lowerBoneId = lowerId,
+            targetX = targetX,
+            targetY = targetY
+        )
+        savePoseToCurrentFrame(updatedPose)
+    }
+
+    fun getCurrentFramePose(): BonePose {
+        val frame = _currentFrame.value
+        val kf = _project.value.boneKeyframes.find { it.frameIndex == frame }
+        return kf?.pose ?: BonePose()
+    }
+
+    private fun savePoseToCurrentFrame(pose: BonePose) {
+        val frame = _currentFrame.value
+        _project.update { p ->
+            val existing = p.boneKeyframes.find { it.frameIndex == frame }
+            val updatedKf = p.boneKeyframes.toMutableList()
+            if (existing != null) {
+                val idx = updatedKf.indexOf(existing)
+                updatedKf[idx] = existing.copy(pose = pose)
+            } else {
+                updatedKf.add(BoneKeyframe(frameIndex = frame, pose = pose))
+            }
+            p.copy(boneKeyframes = updatedKf)
+        }
+    }
+
+    // --- AI Motion Assistant Features ---
+    fun applyProceduralMotion(motionType: ProceduralMotion.MotionType) {
+        pushHistory()
+        val keyframes = ProceduralMotion.generateKeyframes(
+            motionType = motionType,
+            totalFrames = _project.value.totalFrames
+        )
+        _project.update { it.copy(boneKeyframes = keyframes) }
+        showStatus("Generated ${motionType.title} across ${_project.value.totalFrames} frames")
+    }
+
+    fun applyPromptMotion(prompt: String) {
+        pushHistory()
+        val result = AiMotionAssistant.generateMotionFromPrompt(prompt, _project.value.totalFrames)
+        _project.update { it.copy(boneKeyframes = result.keyframes) }
+        showStatus("AI Motion: ${result.title}")
+    }
+
+    fun applyInBetweenFrames(count: Int) {
+        pushHistory()
+        val current = _currentFrame.value
+        val total = _project.value.totalFrames
+        val targetFrame = (current + count + 1).coerceAtMost(total - 1)
+
+        val startPose = getCurrentFramePose()
+        val endKf = _project.value.boneKeyframes.find { it.frameIndex == targetFrame }
+        val endPose = endKf?.pose ?: BonePose()
+
+        val generated = AiMotionAssistant.generateInBetweenBoneKeyframes(
+            startFrame = current,
+            startPose = startPose,
+            endFrame = targetFrame,
+            endPose = endPose
+        )
+
+        _project.update { p ->
+            val mutableKfs = p.boneKeyframes.toMutableList()
+            generated.forEach { gen ->
+                mutableKfs.removeAll { it.frameIndex == gen.frameIndex }
+                mutableKfs.add(gen)
+            }
+            p.copy(boneKeyframes = mutableKfs)
+        }
+        showStatus("Generated $count in-between keyframes")
+    }
+
+    fun applyPalette(palette: ColorPaletteSuggestion) {
+        if (palette.colorsArgb.isNotEmpty()) {
+            _brushColor.value = Color(palette.colorsArgb.first())
+            showStatus("Applied palette: ${palette.themeName}")
+        }
+    }
+
+    // --- Project Storage & Exports ---
+    fun refreshSavedProjects() {
+        _savedProjects.value = storage.listSavedProjects()
+    }
+
+    fun saveCurrentProject() {
+        val success = storage.saveProject(_project.value)
+        if (success) {
+            refreshSavedProjects()
+            showStatus("Project saved successfully")
+        } else {
+            showStatus("Failed to save project")
+        }
+    }
+
+    fun loadProject(id: String) {
+        val loaded = storage.loadProject(id)
+        if (loaded != null) {
+            _project.value = loaded
+            _currentFrame.value = 0
+            if (loaded.layers.isNotEmpty()) {
+                _activeLayerId.value = loaded.layers.first().id
+            }
+            undoStack.clear()
+            redoStack.clear()
+            showStatus("Loaded project: ${loaded.name}")
+        }
+    }
+
+    fun createNewProject(name: String, width: Int = 1280, height: Int = 720, fps: Int = 24) {
+        pushHistory()
+        val newProj = AnimationProject(
+            name = name.ifBlank { "New Animation" },
+            canvasWidth = width,
+            canvasHeight = height,
+            fps = fps,
+            totalFrames = 16
+        )
+        val initialCels = mutableListOf<DrawingCel>()
+        newProj.layers.forEach { layer ->
+            for (f in 0 until newProj.totalFrames) {
+                initialCels.add(DrawingCel(frameIndex = f, layerId = layer.id))
+            }
+        }
+        _project.value = newProj.copy(cels = initialCels)
+        _currentFrame.value = 0
+        _activeLayerId.value = newProj.layers.first().id
+        showStatus("Created new project: ${newProj.name}")
+    }
+
+    fun exportGif(withBackground: Boolean = true, onComplete: (File?) -> Unit) {
+        viewModelScope.launch {
+            showStatus("Rendering GIF frames...")
+            val p = _project.value
+            val renderedFrames = mutableListOf<Bitmap>()
+            val bgColor = if (withBackground) android.graphics.Color.WHITE else null
+
+            for (f in 0 until p.totalFrames) {
+                val bmp = DrawingEngine.compositeFrame(
+                    width = p.canvasWidth,
+                    height = p.canvasHeight,
+                    frameIndex = f,
+                    layers = p.layers,
+                    cels = p.cels,
+                    backgroundColor = bgColor
+                )
+                renderedFrames.add(bmp)
+            }
+
+            val file = storage.exportGif(renderedFrames, p.fps)
+            if (file != null) {
+                showStatus("GIF Exported: ${file.name}")
+            } else {
+                showStatus("GIF Export failed")
+            }
+            onComplete(file)
+        }
+    }
+
+    fun exportPngSequence(onComplete: (List<File>) -> Unit) {
+        viewModelScope.launch {
+            showStatus("Exporting PNG sequence...")
+            val p = _project.value
+            val renderedFrames = mutableListOf<Bitmap>()
+
+            for (f in 0 until p.totalFrames) {
+                val bmp = DrawingEngine.compositeFrame(
+                    width = p.canvasWidth,
+                    height = p.canvasHeight,
+                    frameIndex = f,
+                    layers = p.layers,
+                    cels = p.cels
+                )
+                renderedFrames.add(bmp)
+            }
+
+            val files = storage.exportPngSequence(renderedFrames)
+            showStatus("Exported ${files.size} PNG frames")
+            onComplete(files)
+        }
+    }
+
+    fun exportMp4(onComplete: (File?) -> Unit) {
+        viewModelScope.launch {
+            showStatus("Encoding MP4 Video...")
+            val p = _project.value
+            val renderedFrames = mutableListOf<Bitmap>()
+
+            for (f in 0 until p.totalFrames) {
+                val bmp = DrawingEngine.compositeFrame(
+                    width = p.canvasWidth,
+                    height = p.canvasHeight,
+                    frameIndex = f,
+                    layers = p.layers,
+                    cels = p.cels,
+                    backgroundColor = android.graphics.Color.WHITE
+                )
+                renderedFrames.add(bmp)
+            }
+
+            val file = storage.exportMp4(renderedFrames, p.fps)
+            if (file != null) {
+                showStatus("MP4 Video Exported: ${file.name}")
+            } else {
+                showStatus("MP4 Export failed")
+            }
+            onComplete(file)
+        }
+    }
+
+    // --- Tablet Palm Rejection & Pressure Curves ---
+    fun setPalmRejectionMode(mode: PalmRejectionMode) {
+        _palmRejectionMode.value = mode
+        showStatus("Palm Rejection: ${mode.name}")
+    }
+
+    fun setPressureCurve(curve: PressureCurve) {
+        _pressureCurve.value = curve
+        showStatus("Pressure Curve: ${curve.name}")
+    }
+
+    // --- Color Management & Recent Colors ---
+    fun selectColor(color: Color) {
+        _brushColor.value = color
+        val list = _recentColors.value.toMutableList()
+        list.remove(color)
+        list.add(0, color)
+        if (list.size > 12) list.removeAt(list.size - 1)
+        _recentColors.value = list
+    }
+
+    fun addColorToCustomPalette(color: Color) {
+        if (!_customPalette.value.contains(color)) {
+            _customPalette.value = _customPalette.value + color
+            showStatus("Added color to palette")
+        }
+    }
+
+    fun removeColorFromCustomPalette(color: Color) {
+        _customPalette.value = _customPalette.value.filter { it != color }
+    }
+
+    // --- Advanced Multi-Layer Operations ---
+    fun duplicateLayer(layerId: String) {
+        pushHistory()
+        val p = _project.value
+        val sourceLayer = p.layers.find { it.id == layerId } ?: return
+        val newLayerId = "layer_${System.currentTimeMillis()}"
+        val newLayer = sourceLayer.copy(
+            id = newLayerId,
+            name = "${sourceLayer.name} Copy"
+        )
+
+        // Duplicate all cels on this layer
+        val newCels = p.cels.toMutableList()
+        p.cels.filter { it.layerId == layerId }.forEach { cel ->
+            newCels.add(
+                cel.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    layerId = newLayerId
+                )
+            )
+        }
+
+        _project.update {
+            it.copy(
+                layers = it.layers + newLayer,
+                cels = newCels
+            )
+        }
+        _activeLayerId.value = newLayerId
+        showStatus("Duplicated ${sourceLayer.name}")
+    }
+
+    fun mergeLayerDown(layerId: String) {
+        val p = _project.value
+        val idx = p.layers.indexOfFirst { it.id == layerId }
+        if (idx <= 0) {
+            showStatus("No layer below to merge into")
+            return
+        }
+        pushHistory()
+        val targetLayer = p.layers[idx - 1]
+        val sourceCels = p.cels.filter { it.layerId == layerId }
+
+        val updatedCels = p.cels.filter { it.layerId != layerId }.map { cel ->
+            if (cel.layerId == targetLayer.id) {
+                val matchingSrc = sourceCels.find { it.frameIndex == cel.frameIndex }
+                if (matchingSrc != null) {
+                    cel.copy(strokes = cel.strokes + matchingSrc.strokes)
+                } else cel
+            } else cel
+        }
+
+        _project.update {
+            it.copy(
+                layers = it.layers.filter { l -> l.id != layerId },
+                cels = updatedCels
+            )
+        }
+        _activeLayerId.value = targetLayer.id
+        showStatus("Merged into ${targetLayer.name}")
+    }
+
+    fun setLayerBlendMode(layerId: String, blendMode: BlendModeType) {
+        pushHistory()
+        _project.update { p ->
+            p.copy(layers = p.layers.map {
+                if (it.id == layerId) it.copy(blendMode = blendMode) else it
+            })
+        }
+        showStatus("Layer blend: ${blendMode.label}")
+    }
+
+    // --- Node-Based Animation & Compositing Graph ---
+    fun toggleNodeGraphView() {
+        _isNodeGraphViewActive.update { !it }
+    }
+
+    fun updateNodePosition(nodeId: String, newX: Float, newY: Float) {
+        _nodeGraph.update { g ->
+            g.copy(nodes = g.nodes.map {
+                if (it.id == nodeId) it.copy(x = newX, y = newY) else it
+            })
+        }
+    }
+
+    fun addGraphNode(type: AnimationNodeType) {
+        val title = when (type) {
+            AnimationNodeType.LAYER_SOURCE -> "Layer Source"
+            AnimationNodeType.TRANSFORM -> "Transform Motion"
+            AnimationNodeType.COLOR_FX -> "Color Filter"
+            AnimationNodeType.AI_MOTION -> "AI Motion Driver"
+            AnimationNodeType.COMPOSITE_OUTPUT -> "Output"
+        }
+        val newNode = GraphNode(
+            title = title,
+            nodeType = type,
+            x = 300f + (_nodeGraph.value.nodes.size * 20f),
+            y = 200f + (_nodeGraph.value.nodes.size * 20f),
+            inputs = if (type == AnimationNodeType.LAYER_SOURCE) emptyList() else listOf(com.example.frameforge.model.NodeSocket("in_data", "Input", false)),
+            outputs = if (type == AnimationNodeType.COMPOSITE_OUTPUT) emptyList() else listOf(com.example.frameforge.model.NodeSocket("out_data", "Output", true))
+        )
+        _nodeGraph.update { it.copy(nodes = it.nodes + newNode) }
+        showStatus("Added node: $title")
+    }
+
+    fun deleteGraphNode(nodeId: String) {
+        _nodeGraph.update { g ->
+            g.copy(
+                nodes = g.nodes.filter { it.id != nodeId },
+                connections = g.connections.filter { it.fromNodeId != nodeId && it.toNodeId != nodeId }
+            )
+        }
+        showStatus("Deleted node")
+    }
+
+    fun updateNodeParameter(nodeId: String, paramKey: String, paramValue: String) {
+        _nodeGraph.update { g ->
+            g.copy(nodes = g.nodes.map {
+                if (it.id == nodeId) {
+                    val p = it.parameters.toMutableMap()
+                    p[paramKey] = paramValue
+                    it.copy(parameters = p)
+                } else it
+            })
+        }
+    }
+
+    // ==========================================
+    // --- PROCREATE MASTER OVERHAUL ACTIONS ---
+    // ==========================================
+
+    fun closeAllPopovers() {
+        _isActionsPopoverOpen.value = false
+        _isAdjustmentsPopoverOpen.value = false
+        _isBrushStudioOpen.value = false
+        _isLayersPopoverOpen.value = false
+        _isColorPickerOpen.value = false
+        _isGalleryDialogOpen.value = false
+    }
+
+    fun toggleActionsPopover() {
+        val next = !_isActionsPopoverOpen.value
+        closeAllPopovers()
+        _isActionsPopoverOpen.value = next
+    }
+
+    fun setActionsTab(tab: ActionsTab) {
+        _actionsTab.value = tab
+    }
+
+    fun toggleAdjustmentsPopover() {
+        val next = !_isAdjustmentsPopoverOpen.value
+        closeAllPopovers()
+        _isAdjustmentsPopoverOpen.value = next
+    }
+
+    fun startAdjustment(type: AdjustmentType) {
+        _adjustmentState.value = AdjustmentState(activeType = type, intensity = 0.35f)
+        _isAdjustmentsPopoverOpen.value = false
+        showStatus("${type.label} Active • Slide on canvas to adjust")
+    }
+
+    fun updateAdjustmentIntensity(intensity: Float) {
+        _adjustmentState.update { it.copy(intensity = intensity.coerceIn(0f, 1f)) }
+    }
+
+    fun applyAdjustment() {
+        val adj = _adjustmentState.value
+        if (adj.activeType != AdjustmentType.NONE) {
+            pushHistory()
+            showStatus("Applied ${adj.activeType.label}")
+            _adjustmentState.value = AdjustmentState(activeType = AdjustmentType.NONE)
+        }
+    }
+
+    fun cancelAdjustment() {
+        _adjustmentState.value = AdjustmentState(activeType = AdjustmentType.NONE)
+        showStatus("Cancelled Adjustment")
+    }
+
+    fun toggleBrushStudio() {
+        val next = !_isBrushStudioOpen.value
+        closeAllPopovers()
+        _isBrushStudioOpen.value = next
+    }
+
+    fun selectBrushCategory(cat: BrushCategory) {
+        _activeBrushCategory.value = cat
+        val firstInCat = BrushDefinition.defaultBrushes().find { it.category == cat }
+        if (firstInCat != null) {
+            selectBrush(firstInCat)
+        }
+    }
+
+    fun selectBrush(brush: BrushDefinition) {
+        _activeBrush.value = brush
+        _currentTool.value = brush.toolType
+        _brushSize.value = brush.defaultSize
+        _brushOpacity.value = brush.defaultOpacity
+        _brushSmoothing.value = brush.streamline
+        showStatus("Selected ${brush.name}")
+    }
+
+    fun toggleLayersPopover() {
+        val next = !_isLayersPopoverOpen.value
+        closeAllPopovers()
+        _isLayersPopoverOpen.value = next
+    }
+
+    fun toggleColorPicker() {
+        val next = !_isColorPickerOpen.value
+        closeAllPopovers()
+        _isColorPickerOpen.value = next
+    }
+
+    fun setColorPickerTab(tab: ColorPickerTab) {
+        _colorPickerTab.value = tab
+    }
+
+    fun toggleGalleryDialog() {
+        val next = !_isGalleryDialogOpen.value
+        closeAllPopovers()
+        _isGalleryDialogOpen.value = next
+    }
+
+    fun toggleReferenceCompanion() {
+        _isReferenceCompanionOpen.update { !it }
+        showStatus(if (_isReferenceCompanionOpen.value) "Reference Companion Opened" else "Reference Window Closed")
+    }
+
+    fun toggleRightHandedInterface() {
+        _isRightHandedInterface.update { !it }
+        showStatus(if (_isRightHandedInterface.value) "Right-handed HUD" else "Left-handed HUD")
+    }
+
+    fun toggleAnimationAssist() {
+        _isAnimationAssistVisible.update { !it }
+        showStatus(if (_isAnimationAssistVisible.value) "Animation Assist Shown" else "Animation Assist Hidden")
+    }
+
+    fun toggleDreamsMultiTrack() {
+        _isDreamsMultiTrackVisible.update { !it }
+        showStatus(if (_isDreamsMultiTrackVisible.value) "Procreate Dreams Tracks View" else "Single Track Assist View")
+    }
+
+    // --- CANVAS CROP & 4K RESOLUTION ---
+    fun setCanvasResolution(preset: CanvasResolutionPreset) {
+        pushHistory()
+        _project.update {
+            it.copy(
+                canvasWidth = preset.width,
+                canvasHeight = preset.height
+            )
+        }
+        showStatus("Canvas set to ${preset.label}")
+    }
+
+    // --- 4K VIDEO ROTOSCOPING ENGINE ---
+    fun toggleRotoscopingVideo() {
+        _project.update {
+            it.copy(videoTrack = it.videoTrack.copy(isEnabled = !it.videoTrack.isEnabled))
+        }
+        showStatus(if (_project.value.videoTrack.isEnabled) "Rotoscoping Video Track ON" else "Rotoscoping Track OFF")
+    }
+
+    fun setRotoscopingOpacity(opacity: Float) {
+        _project.update {
+            it.copy(videoTrack = it.videoTrack.copy(opacity = opacity.coerceIn(0.05f, 1f)))
+        }
+    }
+
+    fun toggleRotoscopingUnderlay() {
+        _project.update {
+            it.copy(videoTrack = it.videoTrack.copy(isUnderlay = !it.videoTrack.isUnderlay))
+        }
+        showStatus(if (_project.value.videoTrack.isUnderlay) "Video Under Drawing (Trace Mode)" else "Video Over Drawing")
+    }
+
+    // --- AUDIO TRACK & WAVEFORM ENGINE ---
+    fun toggleAudioTrack() {
+        _project.update {
+            it.copy(audioTrack = it.audioTrack.copy(isEnabled = !it.audioTrack.isEnabled))
+        }
+        showStatus(if (_project.value.audioTrack.isEnabled) "Audio Track Active" else "Audio Track Muted")
+    }
+
+    fun setAudioVolume(volume: Float) {
+        _project.update {
+            it.copy(audioTrack = it.audioTrack.copy(volume = volume.coerceIn(0f, 1f)))
+        }
+    }
+
+    fun toggleAudioMute() {
+        _project.update {
+            it.copy(audioTrack = it.audioTrack.copy(isMuted = !it.audioTrack.isMuted))
+        }
+    }
+
+    // --- SELECTION TOOLS ---
+    fun setSelectionMode(mode: SelectionMode) {
+        if (mode == SelectionMode.NONE) {
+            _selectionState.value = SelectionState(mode = SelectionMode.NONE, isActive = false)
+            _currentTool.value = ToolType.PEN
+        } else {
+            _selectionState.value = SelectionState(mode = mode, isActive = true)
+            _currentTool.value = when (mode) {
+                SelectionMode.FREEHAND -> ToolType.LASSO
+                SelectionMode.RECTANGLE -> ToolType.RECT_SELECT
+                SelectionMode.ELLIPSE -> ToolType.ELLIPSE_SELECT
+                SelectionMode.AUTOMATIC -> ToolType.FILL
+                else -> ToolType.LASSO
+            }
+            showStatus("Selection: ${mode.label}")
+        }
+    }
+
+    fun clearSelection() {
+        _selectionState.value = SelectionState(mode = SelectionMode.NONE, isActive = false)
+        _currentTool.value = ToolType.PEN
+        showStatus("Selection Cleared")
+    }
+
+    fun invertSelection() {
+        _selectionState.update { it.copy(isInverted = !it.isInverted) }
+        showStatus("Selection Inverted")
+    }
+
+    // --- TRANSFORM ENGINE ---
+    fun toggleTransformMode() {
+        val next = !_transformState.value.isActive
+        _transformState.update { it.copy(isActive = next) }
+        if (next) {
+            _currentTool.value = ToolType.TRANSFORM
+            showStatus("Transform Active")
+        } else {
+            _currentTool.value = ToolType.PEN
+            showStatus("Transform Committed")
+        }
+    }
+
+    fun setTransformMode(mode: TransformMode) {
+        _transformState.update { it.copy(mode = mode) }
+    }
+
+    fun flipTransformH() {
+        _transformState.update { it.copy(flipH = !it.flipH, scaleX = it.scaleX * -1f) }
+        showStatus("Flipped Horizontal")
+    }
+
+    fun flipTransformV() {
+        _transformState.update { it.copy(flipV = !it.flipV, scaleY = it.scaleY * -1f) }
+        showStatus("Flipped Vertical")
+    }
+
+    fun rotateTransform45() {
+        _transformState.update { it.copy(rotationDeg = (it.rotationDeg + 45f) % 360f) }
+        showStatus("Rotated 45°")
+    }
+
+    fun resetTransform() {
+        _transformState.value = TransformState(isActive = true)
+        showStatus("Transform Reset")
+    }
+}
+
