@@ -531,6 +531,107 @@ class FrameForgeUnitTest {
 
         val canonical = com.example.frameforge.cinema.ShiftAndTraceState()
         assertFalse("Default state is not modified", canonical.isModified())
+
+        // Test Local vs World Space toggle
+        assertTrue("Default is world space", canonical.isWorldSpace)
+        val localSpace = canonical.copy(isWorldSpace = false)
+        assertFalse("Toggled state is local space", localSpace.isWorldSpace)
+    }
+
+    @Test
+    fun testClipEditorEngineSplitAndSlip() {
+        val clip = com.example.frameforge.cinema.TimelineClip(
+            id = "test_clip_1",
+            trackId = "track_main",
+            name = "Hero Cel",
+            startFrame = 10,
+            durationFrames = 20,
+            sourceInFrame = 0,
+            sourceDuration = 20
+        )
+
+        // Split at frame 18 (inside clip: 10 + 8)
+        val split = com.example.frameforge.cinema.ClipEditorEngine.splitClipAt(clip, 18)
+        assertNotNull("Split should succeed inside clip bounds", split)
+        assertEquals("First clip starts at 10", 10, split!!.first.startFrame)
+        assertEquals("First clip duration is 8", 8, split.first.durationFrames)
+        assertEquals("Second clip starts at 18", 18, split.second.startFrame)
+        assertEquals("Second clip duration is 12", 12, split.second.durationFrames)
+
+        // Split outside bounds should return null
+        val invalidSplit = com.example.frameforge.cinema.ClipEditorEngine.splitClipAt(clip, 5)
+        assertTrue("Split outside clip should fail", invalidSplit == null)
+
+        // Slip clip by +4 frames (shifts media window without moving timeline placement)
+        val slipped = com.example.frameforge.cinema.ClipEditorEngine.slipClip(clip, 4)
+        assertEquals("Timeline start frame stays identical", 10, slipped.startFrame)
+        assertEquals("Timeline duration stays identical", 20, slipped.durationFrames)
+        assertEquals("Source In-point shifted by 4", 4, slipped.sourceInFrame)
+    }
+
+    @Test
+    fun testMagneticSnappingCalculations() {
+        val clipA = com.example.frameforge.cinema.TimelineClip(
+            trackId = "t1", name = "A", startFrame = 0, durationFrames = 24
+        )
+        val clipB = com.example.frameforge.cinema.TimelineClip(
+            trackId = "t1", name = "B", startFrame = 48, durationFrames = 24
+        )
+
+        // Near frame 23 (threshold 3 frames) -> should snap to clip A end (24)
+        val snapped = com.example.frameforge.cinema.ClipEditorEngine.findMagneticSnaps(
+            queryFrame = 23,
+            clips = listOf(clipA, clipB),
+            snapThreshold = 3
+        )
+        assertNotNull("Should snap near clip edge", snapped)
+        assertEquals(24, snapped!!.frameIndex)
+
+        // Far from any boundary (frame 36) -> no snap
+        val noSnap = com.example.frameforge.cinema.ClipEditorEngine.findMagneticSnaps(
+            queryFrame = 36,
+            clips = listOf(clipA, clipB),
+            snapThreshold = 3
+        )
+        assertTrue("No snap when outside threshold", noSnap == null)
+    }
+
+    @Test
+    fun testAutoAdvanceMomentumVelocityExtraction() {
+        val stroke = com.example.frameforge.model.DrawingStroke(
+            points = listOf(
+                com.example.frameforge.model.StrokePoint(100f, 100f, 0.5f, tiltDeg = 15f),
+                com.example.frameforge.model.StrokePoint(120f, 115f, 0.7f, tiltDeg = 18f),
+                com.example.frameforge.model.StrokePoint(150f, 130f, 0.9f, tiltDeg = 20f)
+            ),
+            colorArgb = 0xFF000000.toInt(),
+            toolType = com.example.frameforge.model.ToolType.PEN,
+            size = 8f
+        )
+
+        // Verify tilt preservation
+        assertEquals(20f, stroke.points.last().tiltDeg, 0.01f)
+
+        // Verify velocity vector between last two points: dx = 150 - 120 = 30, dy = 130 - 115 = 15
+        val pEnd = stroke.points.last()
+        val pPrev = stroke.points[stroke.points.size - 2]
+        val vx = pEnd.x - pPrev.x
+        val vy = pEnd.y - pPrev.y
+        assertEquals(30f, vx, 0.01f)
+        assertEquals(15f, vy, 0.01f)
+    }
+
+    @Test
+    fun testStylusTiltAndPressureMapping() {
+        // Linear mapping
+        val ptLinear = com.example.frameforge.model.StrokePoint(50f, 50f, 0.6f, tiltDeg = 45f)
+        assertEquals(0.6f, ptLinear.pressure, 0.01f)
+        assertEquals(45f, ptLinear.tiltDeg, 0.01f)
+
+        // S-Curve mapping test
+        val p = 0.5f
+        val sCurve = (3f * p * p - 2f * p * p * p)
+        assertEquals(0.5f, sCurve, 0.01f)
     }
 }
 

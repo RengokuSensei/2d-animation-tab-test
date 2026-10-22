@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Build
@@ -35,6 +37,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,8 +72,12 @@ fun ProcreateTopBar(
     isNodeGraphActive: Boolean,
     isExcalidrawOpen: Boolean = false,
     isAutoAdvanceEnabled: Boolean = false,
+    autoAdvanceState: com.example.frameforge.cinema.AutoAdvanceState = com.example.frameforge.cinema.AutoAdvanceState(),
     isVfxOpen: Boolean = false,
     onToggleAutoAdvance: () -> Unit = {},
+    onSetAutoAdvanceMode: (com.example.frameforge.cinema.AutoAdvanceMode) -> Unit = {},
+    onSetAutoAdvanceDebounce: (Long) -> Unit = {},
+    onSetAutoAdvanceFps: (Int) -> Unit = {},
     onOpenVfx: () -> Unit = {},
     onGalleryClick: () -> Unit,
     onActionsClick: () -> Unit,
@@ -249,21 +259,156 @@ fun ProcreateTopBar(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // ⚡ Auto-Cel (Freehand Auto-Advance) Pill
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isAutoAdvanceEnabled) Color(0xFFFFB300) else Color.Transparent)
-                        .clickable { onToggleAutoAdvance() }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .testTag("toggle_auto_advance_button")
-                ) {
-                    Text(
-                        text = if (isAutoAdvanceEnabled) "⚡ Auto ON" else "⚡ Auto",
-                        color = if (isAutoAdvanceEnabled) Color.Black else Color.LightGray,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                var isAutoMenuOpen by remember { mutableStateOf(false) }
+
+                // ⚡ Auto-Cel (Freehand Auto-Advance) Pill + Dropdown
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isAutoAdvanceEnabled) Color(0xFFFFB300) else Color.Transparent)
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isAutoAdvanceEnabled) "⚡ Auto ON" else "⚡ Auto",
+                            color = if (isAutoAdvanceEnabled) Color.Black else Color.LightGray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable { onToggleAutoAdvance() }
+                                .testTag("toggle_auto_advance_button")
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = "Auto-Advance Settings",
+                            tint = if (isAutoAdvanceEnabled) Color.Black else Color.LightGray,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { isAutoMenuOpen = !isAutoMenuOpen }
+                                .testTag("auto_advance_menu_arrow")
+                        )
+                    }
+
+                    if (isAutoMenuOpen) {
+                        Surface(
+                            modifier = Modifier
+                                .padding(top = 32.dp)
+                                .width(280.dp)
+                                .border(1.dp, ProcreateBorder, RoundedCornerShape(12.dp)),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xF218181B),
+                            tonalElevation = 10.dp
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("⚡ AUTO-CEL WORKFLOWS", color = Color(0xFFFFB300), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Mode A
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (autoAdvanceState.mode == com.example.frameforge.cinema.AutoAdvanceMode.STROKE_LIFT_DEBOUNCE) Color(0x33FFB300) else Color.Transparent)
+                                        .clickable { onSetAutoAdvanceMode(com.example.frameforge.cinema.AutoAdvanceMode.STROKE_LIFT_DEBOUNCE) }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Column {
+                                        Text("Mode A: Stroke-Lift Auto-Advance", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Pause threshold auto-commits & creates next pose", color = Color.Gray, fontSize = 9.sp)
+                                    }
+                                }
+
+                                if (autoAdvanceState.mode == com.example.frameforge.cinema.AutoAdvanceMode.STROKE_LIFT_DEBOUNCE) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        listOf(0L to "0ms", 250L to "250ms", 600L to "600ms", 1200L to "1.2s").forEach { (ms, lbl) ->
+                                            val isSel = autoAdvanceState.debounceMs == ms
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(if (isSel) Color(0xFFFFB300) else Color(0x22FFFFFF))
+                                                    .clickable { onSetAutoAdvanceDebounce(ms) }
+                                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(lbl, color = if (isSel) Color.Black else Color.LightGray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Mode B
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (autoAdvanceState.mode == com.example.frameforge.cinema.AutoAdvanceMode.LIVE_LOOP_FLIPBOOK) Color(0x33FFB300) else Color.Transparent)
+                                        .clickable { onSetAutoAdvanceMode(com.example.frameforge.cinema.AutoAdvanceMode.LIVE_LOOP_FLIPBOOK) }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Column {
+                                        Text("Mode B: Live Loop Flipbook", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Draw directly while canvas loops continuously", color = Color.Gray, fontSize = 9.sp)
+                                    }
+                                }
+
+                                if (autoAdvanceState.mode == com.example.frameforge.cinema.AutoAdvanceMode.LIVE_LOOP_FLIPBOOK) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        listOf(4, 8, 12).forEach { fps ->
+                                            val isSel = autoAdvanceState.liveLoopFps == fps
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(if (isSel) Color(0xFFFFB300) else Color(0x22FFFFFF))
+                                                    .clickable { onSetAutoAdvanceFps(fps) }
+                                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                                            ) {
+                                                Text("$fps FPS", color = if (isSel) Color.Black else Color.LightGray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Mode C
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (autoAdvanceState.mode == com.example.frameforge.cinema.AutoAdvanceMode.SMART_MOMENTUM_CLONE) Color(0x33FFB300) else Color.Transparent)
+                                        .clickable { onSetAutoAdvanceMode(com.example.frameforge.cinema.AutoAdvanceMode.SMART_MOMENTUM_CLONE) }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Column {
+                                        Text("Mode C: Smart Momentum Clone", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Auto-clones and translates pose along stylus velocity", color = Color.Gray, fontSize = 9.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0x33FFFFFF))
+                                        .clickable { isAutoMenuOpen = false }
+                                        .padding(vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Close Settings", color = Color.White, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(4.dp))

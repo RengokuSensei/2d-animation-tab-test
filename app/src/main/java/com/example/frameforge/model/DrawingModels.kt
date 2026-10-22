@@ -44,7 +44,8 @@ data class StrokePoint(
     val x: Float,
     val y: Float,
     val pressure: Float = 1.0f,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val tiltDeg: Float = 0f
 )
 
 data class DrawingStroke(

@@ -191,6 +191,9 @@ fun StudioScreen(
                     onCancelAdjustment = { viewModel.cancelAdjustment() },
                     onCloseReferenceCompanion = { viewModel.toggleReferenceCompanion() },
                     onResetPegs = { viewModel.resetShiftAndTracePegs() },
+                    onUpdateLightGizmoPosition = { x, y -> viewModel.updateLightGizmoPosition(x, y) },
+                    onUpdateShiftAndTrace = { dx, dy, dr, ds -> viewModel.updateShiftAndTrace(dx, dy, dr, ds) },
+                    onToggleShiftAndTraceSpace = { viewModel.toggleShiftAndTraceSpace() },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -212,8 +215,12 @@ fun StudioScreen(
                 isNodeGraphActive = isNodeGraphViewActive,
                 isExcalidrawOpen = isExcalidrawModalOpen,
                 isAutoAdvanceEnabled = autoAdvanceState.isEnabled,
+                autoAdvanceState = autoAdvanceState,
                 isVfxOpen = isCinematicVfxDialogOpen,
                 onToggleAutoAdvance = { viewModel.toggleAutoAdvanceActive() },
+                onSetAutoAdvanceMode = { viewModel.setAutoAdvanceMode(it) },
+                onSetAutoAdvanceDebounce = { viewModel.setAutoAdvanceDebounce(it) },
+                onSetAutoAdvanceFps = { viewModel.autoAdvanceController.setLiveLoopFps(it) },
                 onOpenVfx = { viewModel.toggleCinematicVfxDialog() },
                 onGalleryClick = { viewModel.toggleGalleryDialog() },
                 onActionsClick = { viewModel.toggleActionsPopover() },
@@ -318,6 +325,12 @@ fun StudioScreen(
                     timelineClips = timelineClips,
                     selectedClipId = selectedClipId,
                     onSelectClip = { viewModel.selectClip(it) },
+                    onTrimIn = { id, start -> viewModel.trimClipIn(id, start) },
+                    onTrimOut = { id, dur -> viewModel.trimClipOut(id, dur) },
+                    isTimeStretch = viewModel.isTimeStretchActive.collectAsState().value,
+                    onToggleTimeStretch = { viewModel.toggleTimeStretch() },
+                    isShiftAndTraceActive = shiftAndTraceState.isActive,
+                    onToggleShiftAndTrace = { viewModel.toggleShiftAndTrace() },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }

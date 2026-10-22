@@ -1851,6 +1851,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         showStatus("Pegs Reset to Canonical Coordinates")
     }
 
+    fun toggleShiftAndTraceSpace() {
+        _shiftAndTraceState.update { it.copy(isWorldSpace = !it.isWorldSpace) }
+        showStatus(if (_shiftAndTraceState.value.isWorldSpace) "Light Table: World Space" else "Light Table: Local Object Space")
+    }
+
     // --- PSYCHOVISUAL SCENE TRANSITIONS ---
     fun toggleSceneTransitionsDialog() {
         _isSceneTransitionsDialogOpen.update { !it }

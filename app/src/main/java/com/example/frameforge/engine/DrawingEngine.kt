@@ -426,25 +426,69 @@ object DrawingEngine {
             style = Paint.Style.STROKE
         }
 
-        // Shift and Trace (Light Table / Out-of-Pegs) transformation
-        val shouldShift = shiftAndTrace != null && shiftAndTrace.isActive && (frameIndex == currentFrame + shiftAndTrace.targetFrameOffset)
+        // Shift and Trace (Light Table / Out-of-Pegs) transformation & Local vs World Space
+        val isLocalObjectSpace = shiftAndTrace != null && !shiftAndTrace.isWorldSpace
+        val shouldShift = (shiftAndTrace != null && shiftAndTrace.isActive && (frameIndex == currentFrame + shiftAndTrace.targetFrameOffset)) || isLocalObjectSpace
+
         if (shouldShift) {
             canvas.save()
             val cx = width / 2f
             val cy = height / 2f
-            canvas.translate(cx + shiftAndTrace.offsetX, cy + shiftAndTrace.offsetY)
-            canvas.rotate(shiftAndTrace.rotationDeg)
-            canvas.scale(shiftAndTrace.scale, shiftAndTrace.scale)
-            canvas.translate(-cx, -cy)
+
+            if (isLocalObjectSpace) {
+                var sumX = 0f
+                var sumY = 0f
+                var ptCount = 0
+                for (l in layers) {
+                    val c = frameCels.find { it.layerId == l.id } ?: continue
+                    for (s in c.strokes) {
+                        for (pt in s.points) {
+                            sumX += pt.x
+                            sumY += pt.y
+                            ptCount++
+                        }
+                    }
+                }
+                if (ptCount > 0) {
+                    val centroidX = sumX / ptCount
+                    val centroidY = sumY / ptCount
+                    canvas.translate(cx - centroidX, cy - centroidY)
+                }
+            }
+
+            if (shiftAndTrace != null && shiftAndTrace.isActive) {
+                canvas.translate(cx + shiftAndTrace.offsetX, cy + shiftAndTrace.offsetY)
+                canvas.rotate(shiftAndTrace.rotationDeg)
+                canvas.scale(shiftAndTrace.scale, shiftAndTrace.scale)
+                canvas.translate(-cx, -cy)
+            }
         }
 
         for (layer in layers) {
             val cel = frameCels.find { it.layerId == layer.id } ?: continue
+
+            // 3D Perspective scaling if layer has non-zero Z-Depth
+            val has3DDepth = layer.posZ != 0f
+            if (has3DDepth) {
+                canvas.save()
+                val cx = width / 2f
+                val cy = height / 2f
+                val f = 1050f // 35mm equivalent focal distance
+                val scaleFactor = (f / (f + layer.posZ).coerceAtLeast(10f))
+                canvas.translate(cx, cy)
+                canvas.scale(scaleFactor, scaleFactor)
+                canvas.translate(-cx, -cy)
+            }
+
             for (stroke in cel.strokes) {
                 if (stroke.points.isEmpty()) continue
                 ghostPaint.strokeWidth = stroke.size
                 val path = buildSmoothPath(stroke.points)
                 canvas.drawPath(path, ghostPaint)
+            }
+
+            if (has3DDepth) {
+                canvas.restore()
             }
         }
 

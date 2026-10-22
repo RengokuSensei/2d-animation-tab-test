@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -12,8 +14,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,10 +59,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.frameforge.cinema.TimelineClip
 import com.example.frameforge.model.AnimationProject
 import com.example.frameforge.model.OnionSkinConfig
 import com.example.frameforge.model.PlaybackMode
@@ -98,6 +105,12 @@ fun ProcreateTimeline(
     timelineClips: List<com.example.frameforge.cinema.TimelineClip> = emptyList(),
     selectedClipId: String? = null,
     onSelectClip: (String?) -> Unit = {},
+    onTrimIn: (clipId: String, newStart: Int) -> Unit = { _, _ -> },
+    onTrimOut: (clipId: String, newDuration: Int) -> Unit = { _, _ -> },
+    isTimeStretch: Boolean = false,
+    onToggleTimeStretch: () -> Unit = {},
+    isShiftAndTraceActive: Boolean = false,
+    onToggleShiftAndTrace: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val lazyListState = rememberLazyListState()
@@ -282,6 +295,34 @@ fun ProcreateTimeline(
                         Text("🌐 3D", color = Color(0xFF34D399), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
 
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Time-Stretch Toggle
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isTimeStretch) Color(0xFFF59E0B) else Color(0x33FFFFFF))
+                            .clickable { onToggleTimeStretch() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("time_stretch_button")
+                    ) {
+                        Text(if (isTimeStretch) "⏳ Stretch ON" else "⏳ Stretch", color = if (isTimeStretch) Color.Black else Color.LightGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Shift & Trace / Light Table Pegs Toggle
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isShiftAndTraceActive) Color(0xFF00E5FF) else Color(0x33FFFFFF))
+                            .clickable { onToggleShiftAndTrace() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("shift_trace_button")
+                    ) {
+                        Text(if (isShiftAndTraceActive) "🧅 Pegs ON" else "🧅 Pegs", color = if (isShiftAndTraceActive) Color.Black else Color.LightGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
                     Spacer(modifier = Modifier.width(6.dp))
 
                     // Onion Skin Toggle Pill
@@ -412,6 +453,23 @@ fun ProcreateTimeline(
                         .fillMaxWidth()
                         .padding(top = 10.dp)
                 ) {
+                    // TRACK 0: NLE Drawing & Video/Audio Clips Track
+                    NleClipTrackLane(
+                        clips = timelineClips,
+                        selectedClipId = selectedClipId,
+                        currentFrame = currentFrame,
+                        totalFrames = project.totalFrames,
+                        isSnappingActive = isSnappingActive,
+                        isRippleEdit = isRippleEdit,
+                        isTimeStretch = isTimeStretch,
+                        onSelectClip = { onSelectClip(it) },
+                        onTrimIn = onTrimIn,
+                        onTrimOut = onTrimOut,
+                        onSplitClip = onSplitClip
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
                     // TRACK 1: Video Rotoscoping Track
                     Row(
                         modifier = Modifier
@@ -519,6 +577,212 @@ fun ProcreateTimeline(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NleClipTrackLane(
+    clips: List<TimelineClip>,
+    selectedClipId: String?,
+    currentFrame: Int,
+    totalFrames: Int,
+    isSnappingActive: Boolean,
+    isRippleEdit: Boolean,
+    isTimeStretch: Boolean,
+    onSelectClip: (String) -> Unit,
+    onTrimIn: (clipId: String, newStart: Int) -> Unit,
+    onTrimOut: (clipId: String, newDuration: Int) -> Unit,
+    onSplitClip: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val trackScrollState = rememberScrollState()
+    val totalTrackWidth = (totalFrames * 12).dp.coerceAtLeast(320.dp)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF131722), RoundedCornerShape(8.dp))
+            .padding(vertical = 6.dp)
+            .testTag("nle_clip_track_lane")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "NLE Motion Clips (${clips.size})",
+                    color = Color(0xFF38BDF8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (isRippleEdit) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("• Ripple", color = Color(0xFF8B5CF6), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                if (isTimeStretch) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("• Stretch Mode", color = Color(0xFFF59E0B), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(
+                text = "Flick down at playhead to ✂️ Split • Drag [ ] to trim",
+                color = Color.Gray,
+                fontSize = 9.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .horizontalScroll(trackScrollState)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { change, dragAmount ->
+                        if (dragAmount > 20f) {
+                            change.consume()
+                            onSplitClip()
+                        }
+                    }
+                }
+        ) {
+            // Track base background
+            Box(
+                modifier = Modifier
+                    .width(totalTrackWidth)
+                    .height(44.dp)
+                    .background(Color(0x18FFFFFF), RoundedCornerShape(6.dp))
+            )
+
+            // Render Clips
+            clips.forEach { clip ->
+                val isSelected = clip.id == selectedClipId
+                val clipStartDp = (clip.startFrame * 12).dp
+                val clipWidthDp = (clip.durationFrames * 12).dp.coerceAtLeast(28.dp)
+
+                var liveStartDelta by remember { mutableStateOf<Int?>(null) }
+                var liveDurationDelta by remember { mutableStateOf<Int?>(null) }
+
+                Box(
+                    modifier = Modifier
+                        .offset(x = clipStartDp, y = 2.dp)
+                        .width(clipWidthDp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(clip.colorArgb).copy(alpha = if (isSelected) 0.85f else 0.55f))
+                        .border(
+                            width = if (isSelected) 2.dp else 1.dp,
+                            color = if (isSelected) Color(0xFF38BDF8) else Color(0x33FFFFFF),
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .clickable { onSelectClip(clip.id) }
+                ) {
+                    // Clip label and speed info
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = clip.name,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = if (clip.speedMultiplier != 1.0f) "${clip.durationFrames}f (${clip.speedMultiplier}x)" else "${clip.durationFrames}f",
+                            color = if (clip.speedMultiplier != 1.0f) Color(0xFFFFD700) else Color.LightGray,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    // Left Trim In Bracket Handle
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .width(12.dp)
+                            .fillMaxHeight()
+                            .background(if (isSelected) Color(0x44FFFFFF) else Color.Transparent)
+                            .pointerInput(clip.id) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        liveStartDelta?.let { delta ->
+                                            onTrimIn(clip.id, (clip.startFrame + delta).coerceAtLeast(0))
+                                        }
+                                        liveStartDelta = null
+                                    },
+                                    onHorizontalDrag = { _, dragAmount ->
+                                        val delta = (dragAmount / 12f).toInt()
+                                        liveStartDelta = (liveStartDelta ?: 0) + delta
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("[", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Right Trim Out Bracket Handle
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(12.dp)
+                            .fillMaxHeight()
+                            .background(if (isSelected) Color(0x44FFFFFF) else Color.Transparent)
+                            .pointerInput(clip.id) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        liveDurationDelta?.let { delta ->
+                                            onTrimOut(clip.id, (clip.durationFrames + delta).coerceAtLeast(1))
+                                        }
+                                        liveDurationDelta = null
+                                    },
+                                    onHorizontalDrag = { _, dragAmount ->
+                                        val delta = (dragAmount / 12f).toInt()
+                                        liveDurationDelta = (liveDurationDelta ?: 0) + delta
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("]", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Live delta tooltip when trimming
+                    if (liveStartDelta != null || liveDurationDelta != null) {
+                        val deltaText = if (liveStartDelta != null) "${if (liveStartDelta!! >= 0) "+" else ""}${liveStartDelta}f" else "${if (liveDurationDelta!! >= 0) "+" else ""}${liveDurationDelta}f"
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = (-18).dp)
+                                .background(Color(0xDD000000), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(deltaText, color = Color(0xFFFFD700), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // Playhead indicator vertical line
+            val playheadOffsetDp = (currentFrame * 12).dp
+            Box(
+                modifier = Modifier
+                    .offset(x = playheadOffsetDp)
+                    .width(2.dp)
+                    .fillMaxHeight()
+                    .background(if (isSnappingActive) Color(0xFFFFD700) else Color(0xFFEF4444))
+            )
         }
     }
 }

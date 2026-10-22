@@ -105,6 +105,9 @@ fun StudioCanvas(
     onCancelAdjustment: () -> Unit = {},
     onCloseReferenceCompanion: () -> Unit = {},
     onResetPegs: () -> Unit = {},
+    onUpdateLightGizmoPosition: (normX: Float, normY: Float) -> Unit = { _, _ -> },
+    onUpdateShiftAndTrace: (dx: Float, dy: Float, dRot: Float, dScale: Float) -> Unit = { _, _, _, _ -> },
+    onToggleShiftAndTraceSpace: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var scale by remember { mutableFloatStateOf(1.0f) }
@@ -113,6 +116,7 @@ fun StudioCanvas(
 
     var isTransforming by remember { mutableStateOf(false) }
     var isStylusStrokeInProgress by remember { mutableStateOf(false) }
+    var isDraggingLightGizmo by remember { mutableStateOf(false) }
 
     fun mapPressure(raw: Float): Float {
         val p = raw.coerceIn(0.05f, 1.0f)
@@ -187,8 +191,20 @@ fun StudioCanvas(
                         MotionEvent.ACTION_DOWN -> {
                             if (motionEvent.pointerCount == 1 && !reject) {
                                 isTransforming = false
-                                if (isStylus) isStylusStrokeInProgress = true
                                 val docPt = screenToDoc(motionEvent.x, motionEvent.y)
+
+                                // Check interactive Light Source Sun Gizmo touch
+                                if (cinematicVfxConfig.lightGizmo.isEnabled) {
+                                    val lightDocX = project.canvasWidth * cinematicVfxConfig.lightGizmo.x
+                                    val lightDocY = project.canvasHeight * cinematicVfxConfig.lightGizmo.y
+                                    val dist = kotlin.math.hypot(docPt.x - lightDocX, docPt.y - lightDocY)
+                                    if (dist <= 45f / scale) {
+                                        isDraggingLightGizmo = true
+                                        return@pointerInteropFilter true
+                                    }
+                                }
+
+                                if (isStylus) isStylusStrokeInProgress = true
                                 val pressure = mapPressure(motionEvent.pressure)
 
                                 if (currentTool == ToolType.BONE_RIG) {
@@ -205,22 +221,31 @@ fun StudioCanvas(
                             true
                         }
                         MotionEvent.ACTION_MOVE -> {
+                            val docPt = screenToDoc(motionEvent.x, motionEvent.y)
+                            if (isDraggingLightGizmo) {
+                                val normX = (docPt.x / project.canvasWidth).coerceIn(0.05f, 0.95f)
+                                val normY = (docPt.y / project.canvasHeight).coerceIn(0.05f, 0.95f)
+                                onUpdateLightGizmoPosition(normX, normY)
+                                return@pointerInteropFilter true
+                            }
+
                             if (motionEvent.pointerCount == 1 && !isTransforming && !reject) {
                                 if (currentTool == ToolType.BONE_RIG && isIkMode) {
-                                    val docPt = screenToDoc(motionEvent.x, motionEvent.y)
                                     onSolveIk(docPt.x, docPt.y)
                                 } else if (currentTool != ToolType.BONE_RIG) {
+                                    val tiltRad = motionEvent.getAxisValue(MotionEvent.AXIS_TILT)
+                                    val tiltDeg = Math.toDegrees(tiltRad.toDouble()).toFloat()
+
                                     // 144Hz Stylus Precision: Extract all intermediate historical samples
                                     val batch = mutableListOf<com.example.frameforge.model.StrokePoint>()
                                     val historyCount = motionEvent.historySize
                                     for (h in 0 until historyCount) {
                                         val hDocPt = screenToDoc(motionEvent.getHistoricalX(h), motionEvent.getHistoricalY(h))
                                         val hPressure = mapPressure(motionEvent.getHistoricalPressure(h))
-                                        batch.add(com.example.frameforge.model.StrokePoint(hDocPt.x, hDocPt.y, hPressure))
+                                        batch.add(com.example.frameforge.model.StrokePoint(hDocPt.x, hDocPt.y, hPressure, tiltDeg = tiltDeg))
                                     }
-                                    val currDocPt = screenToDoc(motionEvent.x, motionEvent.y)
                                     val currPressure = mapPressure(motionEvent.pressure)
-                                    batch.add(com.example.frameforge.model.StrokePoint(currDocPt.x, currDocPt.y, currPressure))
+                                    batch.add(com.example.frameforge.model.StrokePoint(docPt.x, docPt.y, currPressure, tiltDeg = tiltDeg))
 
                                     onUpdateStrokeBatch(batch)
                                 }
@@ -231,6 +256,10 @@ fun StudioCanvas(
                             true
                         }
                         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            if (isDraggingLightGizmo) {
+                                isDraggingLightGizmo = false
+                                return@pointerInteropFilter true
+                            }
                             if (!isTransforming && currentTool != ToolType.BONE_RIG) {
                                 onFinishStroke()
                             }
@@ -553,25 +582,97 @@ fun StudioCanvas(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0A84FF))
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Light Table (Out-of-Pegs)",
+                        "🧅 Light Table",
                         color = Color(0xFF38BDF8),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Space toggle
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { onToggleShiftAndTraceSpace() }
+                            .background(if (shiftAndTraceState.isWorldSpace) Color(0x3300E5FF) else Color(0x33FF9500))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        color = Color.Transparent
+                    ) {
+                        Text(if (shiftAndTraceState.isWorldSpace) "World" else "Local", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Rotate -15
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { onUpdateShiftAndTrace(0f, 0f, -15f, 1f) }
+                            .background(Color(0x22FFFFFF))
+                            .padding(horizontal = 5.dp, vertical = 3.dp),
+                        color = Color.Transparent
+                    ) {
+                        Text("⤹ -15°", color = Color.White, fontSize = 9.sp)
+                    }
+
+                    Spacer(modifier = Modifier.width(3.dp))
+
+                    // Rotate +15
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { onUpdateShiftAndTrace(0f, 0f, 15f, 1f) }
+                            .background(Color(0x22FFFFFF))
+                            .padding(horizontal = 5.dp, vertical = 3.dp),
+                        color = Color.Transparent
+                    ) {
+                        Text("⤸ +15°", color = Color.White, fontSize = 9.sp)
+                    }
+
+                    Spacer(modifier = Modifier.width(3.dp))
+
+                    // Zoom -
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { onUpdateShiftAndTrace(0f, 0f, 0f, 0.9f) }
+                            .background(Color(0x22FFFFFF))
+                            .padding(horizontal = 5.dp, vertical = 3.dp),
+                        color = Color.Transparent
+                    ) {
+                        Text("－", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(3.dp))
+
+                    // Zoom +
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { onUpdateShiftAndTrace(0f, 0f, 0f, 1.1f) }
+                            .background(Color(0x22FFFFFF))
+                            .padding(horizontal = 5.dp, vertical = 3.dp),
+                        color = Color.Transparent
+                    ) {
+                        Text("＋", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Reset Pegs
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { onResetPegs() }
                             .background(Color(0xFF0A84FF))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
                         color = Color.Transparent
                     ) {
-                        Text("Reset Pegs", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("Reset Pegs", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
