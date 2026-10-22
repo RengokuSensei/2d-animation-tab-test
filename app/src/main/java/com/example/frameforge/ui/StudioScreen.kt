@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.frameforge.model.ToolType
+import com.example.frameforge.model.PalmRejectionMode
 import com.example.frameforge.ui.popovers.ActionsPopover
 import com.example.frameforge.ui.popovers.AdjustmentsPopover
 import com.example.frameforge.ui.popovers.BrushStudioPopover
@@ -228,6 +229,7 @@ fun StudioScreen(
                         PalmRejectionMode.AUTOMATIC -> PalmRejectionMode.STYLUS_ONLY
                         PalmRejectionMode.STYLUS_ONLY -> PalmRejectionMode.FINGER_AND_STYLUS
                         PalmRejectionMode.FINGER_AND_STYLUS -> PalmRejectionMode.AUTOMATIC
+                        else -> PalmRejectionMode.AUTOMATIC
                     }
                     viewModel.setPalmRejectionMode(nextMode)
                 },

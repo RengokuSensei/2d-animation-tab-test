@@ -112,9 +112,9 @@ object MermaidDiagramEngine {
         val circle = Regex("""^([a-zA-Z0-9_]+)\s*\(\((.*?)\)\)$""").find(trimmed)
         if (circle != null) return MermaidNode(circle.groupValues[1], circle.groupValues[2].ifBlank { circle.groupValues[1] }, ExcalidrawShapeType.ELLIPSE)
 
-        // Hexagon {{ ... }}
+        // Hexagon {{ ... }} -> map to Hexagon/Rounded container
         val hex = Regex("""^([a-zA-Z0-9_]+)\s*\{\{(.*?)}}$""").find(trimmed)
-        if (hex != null) return MermaidNode(hex.groupValues[1], hex.groupValues[2].ifBlank { hex.groupValues[1] }, ExcalidrawShapeType.HEXAGON)
+        if (hex != null) return MermaidNode(hex.groupValues[1], hex.groupValues[2].ifBlank { hex.groupValues[1] }, ExcalidrawShapeType.ROUNDED_RECT)
 
         // Diamond { ... }
         val diamond = Regex("""^([a-zA-Z0-9_]+)\s*\{(.*?)}$""").find(trimmed)
