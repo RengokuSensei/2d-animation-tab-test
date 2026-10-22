@@ -22,7 +22,9 @@ enum class ToolType(val label: String, val iconDescription: String) {
     ELLIPSE_SELECT("Ellipse Selection", "Elliptical marquee"),
     TRANSFORM("Transform", "Move, scale, rotate, distort"),
     BONE_RIG("Bones & IK", "Character skeleton and inverse kinematics"),
-    EYEDROPPER("Eyedropper", "Sample canvas color")
+    EYEDROPPER("Eyedropper", "Sample canvas color"),
+    HIGHLIGHTER("Smart Highlighter", "Smart text highlighter with Multiply blend"),
+    LASER_POINTER("Laser Pointer", "Vibrant glowing laser pointer with Screen blend")
 }
 
 enum class PalmRejectionMode(val label: String) {
@@ -99,7 +101,8 @@ enum class BrushCategory(val title: String) {
     PAINTING("Painting"),
     ARTISTIC("Artistic"),
     AIRBRUSHING("Airbrushing"),
-    CHARCOALS("Charcoals")
+    CHARCOALS("Charcoals"),
+    SPECIAL_FX("Special FX")
 }
 
 data class BrushDefinition(
@@ -122,6 +125,7 @@ data class BrushDefinition(
                 BrushDefinition("brush_peppermint", "Peppermint", BrushCategory.SKETCHING, ToolType.PENCIL, defaultSize = 8f, defaultOpacity = 0.7f, spacing = 0.08f, streamline = 0.3f),
                 BrushDefinition("brush_derwent", "Derwent Pencil", BrushCategory.SKETCHING, ToolType.PENCIL, defaultSize = 12f, defaultOpacity = 0.85f, spacing = 0.1f, streamline = 0.4f),
                 BrushDefinition("brush_6b", "6B Pencil", BrushCategory.SKETCHING, ToolType.PENCIL, defaultSize = 16f, defaultOpacity = 0.9f, spacing = 0.12f, streamline = 0.2f),
+                BrushDefinition("brush_smart_highlighter", "Smart Highlighter", BrushCategory.INKING, ToolType.HIGHLIGHTER, defaultSize = 28f, defaultOpacity = 0.85f, spacing = 0.05f, streamline = 0.7f),
                 BrushDefinition("brush_studio_pen", "Studio Pen", BrushCategory.INKING, ToolType.PEN, defaultSize = 10f, defaultOpacity = 1.0f, spacing = 0.05f, streamline = 0.75f),
                 BrushDefinition("brush_technical_pen", "Technical Pen", BrushCategory.INKING, ToolType.PEN, defaultSize = 6f, defaultOpacity = 1.0f, spacing = 0.04f, streamline = 0.8f),
                 BrushDefinition("brush_syrup", "Syrup Ink", BrushCategory.INKING, ToolType.INK, defaultSize = 14f, defaultOpacity = 1.0f, spacing = 0.06f, streamline = 0.6f),
@@ -135,7 +139,9 @@ data class BrushDefinition(
                 BrushDefinition("brush_medium_nozzle", "Medium Nozzle", BrushCategory.AIRBRUSHING, ToolType.AIRBRUSH, defaultSize = 32f, defaultOpacity = 0.6f, spacing = 0.06f, streamline = 0.55f),
                 BrushDefinition("brush_hard_airbrush", "Hard Airbrush", BrushCategory.AIRBRUSHING, ToolType.AIRBRUSH, defaultSize = 20f, defaultOpacity = 0.85f, spacing = 0.05f, streamline = 0.6f),
                 BrushDefinition("brush_willow_charcoal", "Willow Charcoal", BrushCategory.CHARCOALS, ToolType.CHARCOAL, defaultSize = 26f, defaultOpacity = 0.75f, spacing = 0.14f, streamline = 0.3f),
-                BrushDefinition("brush_vine_charcoal", "Vine Charcoal", BrushCategory.CHARCOALS, ToolType.CHARCOAL, defaultSize = 34f, defaultOpacity = 0.65f, spacing = 0.16f, streamline = 0.2f)
+                BrushDefinition("brush_vine_charcoal", "Vine Charcoal", BrushCategory.CHARCOALS, ToolType.CHARCOAL, defaultSize = 34f, defaultOpacity = 0.65f, spacing = 0.16f, streamline = 0.2f),
+                BrushDefinition("brush_neon_highlighter", "Neon Fluorescent Marker", BrushCategory.SPECIAL_FX, ToolType.HIGHLIGHTER, defaultSize = 34f, defaultOpacity = 0.8f, spacing = 0.05f, streamline = 0.65f),
+                BrushDefinition("brush_laser_pointer", "Laser Pointer & Reveal", BrushCategory.SPECIAL_FX, ToolType.LASER_POINTER, defaultSize = 16f, defaultOpacity = 1.0f, spacing = 0.04f, streamline = 0.85f)
             )
         }
     }

@@ -270,6 +270,18 @@ fun StudioCanvas(
                     )
                 }
 
+                // 1b. Draw Multi-Page PDF Document Track (if enabled and set to underlay)
+                if (project.pdfTrack.isEnabled && project.pdfTrack.isUnderlay) {
+                    DrawingEngine.renderPdfTrackFrame(
+                        canvas = nativeCanvas,
+                        docWidth = project.canvasWidth,
+                        docHeight = project.canvasHeight,
+                        frameIndex = currentFrame,
+                        totalFrames = project.totalFrames,
+                        track = project.pdfTrack
+                    )
+                }
+
                 // 2. Draw Onion Skins
                 if (onionSkinConfig.enabled) {
                     DrawingEngine.renderOnionSkins(
@@ -309,6 +321,18 @@ fun StudioCanvas(
                         docHeight = project.canvasHeight,
                         frameIndex = currentFrame,
                         track = project.videoTrack
+                    )
+                }
+
+                // 5b. Draw Multi-Page PDF Document Track (if enabled and set to overlay)
+                if (project.pdfTrack.isEnabled && !project.pdfTrack.isUnderlay) {
+                    DrawingEngine.renderPdfTrackFrame(
+                        canvas = nativeCanvas,
+                        docWidth = project.canvasWidth,
+                        docHeight = project.canvasHeight,
+                        frameIndex = currentFrame,
+                        totalFrames = project.totalFrames,
+                        track = project.pdfTrack
                     )
                 }
 

@@ -12,7 +12,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class FrameForgeUnitTest {
 
     @Test
@@ -171,5 +176,85 @@ class FrameForgeUnitTest {
         waveform.forEach { peak ->
             assertTrue("Waveform peak should be normalized between 0.1 and 1.0", peak in 0.05f..1.0f)
         }
+    }
+
+    @Test
+    fun testPdfPageRangeParserComprehensive() {
+        // Standard range parsing
+        val range1 = com.example.frameforge.pdf.PdfEngine.parsePageRange("1-3, 5, 8-10", 12)
+        assertEquals(setOf(0, 1, 2, 4, 7, 8, 9), range1)
+
+        // Single page
+        val single = com.example.frameforge.pdf.PdfEngine.parsePageRange("4", 8)
+        assertEquals(setOf(3), single)
+
+        // Empty and blank strings
+        assertTrue(com.example.frameforge.pdf.PdfEngine.parsePageRange("", 8).isEmpty())
+        assertTrue(com.example.frameforge.pdf.PdfEngine.parsePageRange("   ", 8).isEmpty())
+
+        // Out of bounds and clamping
+        val clamped = com.example.frameforge.pdf.PdfEngine.parsePageRange("1-20", 5)
+        assertEquals(setOf(0, 1, 2, 3, 4), clamped)
+
+        // Inverted range order (e.g. 5-3)
+        val inverted = com.example.frameforge.pdf.PdfEngine.parsePageRange("5-3", 10)
+        assertEquals(setOf(2, 3, 4), inverted)
+
+        // Invalid tokens gracefully ignored
+        val invalidTokens = com.example.frameforge.pdf.PdfEngine.parsePageRange("1, abc, -5, 2-x, 3", 6)
+        assertEquals(setOf(0, 2), invalidTokens)
+    }
+
+    @Test
+    fun testWhiteToAlphaExtractionFilter() {
+        // Create 2x2 test bitmap: TopLeft=White, TopRight=Black, BottomLeft=Red, BottomRight=LightGray
+        val bmp = android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888)
+        bmp.setPixel(0, 0, android.graphics.Color.WHITE) // #FFFFFFFF
+        bmp.setPixel(1, 0, android.graphics.Color.BLACK) // #FF000000
+        bmp.setPixel(0, 1, android.graphics.Color.RED)   // #FFFF0000
+        bmp.setPixel(1, 1, android.graphics.Color.rgb(250, 250, 250)) // Near-white paper
+
+        val extracted = com.example.frameforge.pdf.PdfEngine.extractWhiteToAlpha(bmp, tolerance = 0.12f, invert = false)
+
+        // Pure white should have alpha 0 (completely transparent)
+        val whiteAlpha = android.graphics.Color.alpha(extracted.getPixel(0, 0))
+        assertEquals("Pure white background must be 100% transparent", 0, whiteAlpha)
+
+        // Pure black must remain fully opaque (alpha 255)
+        val blackAlpha = android.graphics.Color.alpha(extracted.getPixel(1, 0))
+        assertEquals("Black ink lines must remain fully opaque", 255, blackAlpha)
+
+        // Near-white paper should have zero or near-zero alpha
+        val lightAlpha = android.graphics.Color.alpha(extracted.getPixel(1, 1))
+        assertTrue("Light paper should be transparent or faded", lightAlpha < 30)
+
+        // Red drawing should remain visible
+        val redAlpha = android.graphics.Color.alpha(extracted.getPixel(0, 1))
+        assertTrue("Colored drawing should retain opacity", redAlpha > 200)
+    }
+
+    @Test
+    fun testDarkModeInkInversion() {
+        val bmp = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
+        bmp.setPixel(0, 0, android.graphics.Color.BLACK)
+
+        val inverted = com.example.frameforge.pdf.PdfEngine.extractWhiteToAlpha(bmp, tolerance = 0.12f, invert = true)
+        val pixel = inverted.getPixel(0, 0)
+        assertEquals(255, android.graphics.Color.red(pixel))
+        assertEquals(255, android.graphics.Color.green(pixel))
+        assertEquals(255, android.graphics.Color.blue(pixel))
+    }
+
+    @Test
+    fun testSmartHighlighterAndLaserPointerBrushes() {
+        val brushes = com.example.frameforge.model.BrushDefinition.defaultBrushes()
+        val highlighter = brushes.find { it.toolType == com.example.frameforge.model.ToolType.HIGHLIGHTER }
+        assertNotNull("Should include Smart Highlighter brush", highlighter)
+
+        val laserPointer = brushes.find { it.toolType == com.example.frameforge.model.ToolType.LASER_POINTER }
+        assertNotNull("Should include Laser Pointer brush", laserPointer)
+
+        val hasSpecialFx = brushes.any { it.category == com.example.frameforge.model.BrushCategory.SPECIAL_FX }
+        assertTrue("Should include Special FX brush category", hasSpecialFx)
     }
 }

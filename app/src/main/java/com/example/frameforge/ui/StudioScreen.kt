@@ -84,12 +84,25 @@ fun StudioScreen(
     val isDreamsMultiTrackVisible by viewModel.isDreamsMultiTrackVisible.collectAsState()
     val selectionState by viewModel.selectionState.collectAsState()
     val transformState by viewModel.transformState.collectAsState()
+    val isPdfImportDialogOpen by viewModel.isPdfImportDialogOpen.collectAsState()
+    val pdfFile by viewModel.pdfFile.collectAsState()
+    val pdfDocumentTitle by viewModel.pdfDocumentTitle.collectAsState()
+
+    val pdfPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.openPdfImportDialogWithUri(uri)
+        }
+    }
+
     val hasModalOpen = isGalleryDialogOpen || isActionsPopoverOpen || isAdjustmentsPopoverOpen ||
         isBrushStudioOpen || isLayersPopoverOpen || isColorPickerOpen ||
-        transformState.isActive || selectionState.isActive || isNodeGraphViewActive
+        transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen
 
     BackHandler(enabled = hasModalOpen) {
         when {
+            isPdfImportDialogOpen -> viewModel.closePdfImportDialog()
             isGalleryDialogOpen -> viewModel.toggleGalleryDialog()
             isColorPickerOpen -> viewModel.toggleColorPicker()
             isLayersPopoverOpen -> viewModel.toggleLayersPopover()
@@ -306,6 +319,14 @@ fun StudioScreen(
                     onSaveProject = { viewModel.saveCurrentProject() },
                     onImportVideoRotoscoping = { viewModel.toggleRotoscopingVideo() },
                     onImportAudioTrack = { viewModel.toggleAudioTrack() },
+                    onImportPdfDocument = {
+                        viewModel.toggleActionsPopover()
+                        pdfPickerLauncher.launch(arrayOf("application/pdf"))
+                    },
+                    onLoadSamplePdf = {
+                        viewModel.toggleActionsPopover()
+                        viewModel.loadSamplePdfDocument()
+                    },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(top = 54.dp, start = 48.dp)
@@ -381,6 +402,17 @@ fun StudioScreen(
                     onLoadProject = { viewModel.loadProject(it) },
                     onNewProject = { viewModel.createNewProject(it) },
                     onClose = { viewModel.toggleGalleryDialog() }
+                )
+            }
+
+            // Multi-Page PDF Import Studio Dialog
+            if (isPdfImportDialogOpen) {
+                com.example.frameforge.ui.popovers.PdfImportDialog(
+                    pdfFile = pdfFile,
+                    documentTitle = pdfDocumentTitle,
+                    onDismiss = { viewModel.closePdfImportDialog() },
+                    onLoadSamplePdf = { viewModel.loadSamplePdfDocument() },
+                    onConfirmImport = { file, config -> viewModel.commitPdfImport(file, config) }
                 )
             }
         }

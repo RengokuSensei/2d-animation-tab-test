@@ -32,8 +32,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.graphics.pdf.PdfRenderer
+import android.net.Uri
+import android.os.ParcelFileDescriptor
+import com.example.frameforge.pdf.PdfDocumentTrack
+import com.example.frameforge.pdf.PdfEngine
+import com.example.frameforge.pdf.PdfImportConfig
+import com.example.frameforge.pdf.PdfImportMode
 import java.io.File
+import java.io.FileOutputStream
 import java.util.Stack
+import kotlin.math.max
+import kotlin.math.min
 
 import com.example.frameforge.model.ActionsTab
 import com.example.frameforge.model.AdjustmentState
@@ -199,6 +211,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _transformState = MutableStateFlow(TransformState())
     val transformState: StateFlow<TransformState> = _transformState.asStateFlow()
+
+    // --- PDF IMPORT STUDIO STATE ---
+    private val _isPdfImportDialogOpen = MutableStateFlow(false)
+    val isPdfImportDialogOpen: StateFlow<Boolean> = _isPdfImportDialogOpen.asStateFlow()
+
+    private val _pdfFile = MutableStateFlow<File?>(null)
+    val pdfFile: StateFlow<File?> = _pdfFile.asStateFlow()
+
+    private val _pdfDocumentTitle = MutableStateFlow("Document.pdf")
+    val pdfDocumentTitle: StateFlow<String> = _pdfDocumentTitle.asStateFlow()
 
 
     // Undo / Redo history
@@ -754,7 +776,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     frameIndex = f,
                     layers = p.layers,
                     cels = p.cels,
-                    backgroundColor = bgColor
+                    backgroundColor = bgColor,
+                    pdfTrack = p.pdfTrack,
+                    totalFrames = p.totalFrames
                 )
                 renderedFrames.add(bmp)
             }
@@ -781,7 +805,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     height = p.canvasHeight,
                     frameIndex = f,
                     layers = p.layers,
-                    cels = p.cels
+                    cels = p.cels,
+                    pdfTrack = p.pdfTrack,
+                    totalFrames = p.totalFrames
                 )
                 renderedFrames.add(bmp)
             }
@@ -805,7 +831,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     frameIndex = f,
                     layers = p.layers,
                     cels = p.cels,
-                    backgroundColor = android.graphics.Color.WHITE
+                    backgroundColor = android.graphics.Color.WHITE,
+                    pdfTrack = p.pdfTrack,
+                    totalFrames = p.totalFrames
                 )
                 renderedFrames.add(bmp)
             }
@@ -1128,6 +1156,211 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(videoTrack = it.videoTrack.copy(isUnderlay = !it.videoTrack.isUnderlay))
         }
         showStatus(if (_project.value.videoTrack.isUnderlay) "Video Under Drawing (Trace Mode)" else "Video Over Drawing")
+    }
+
+    // --- MULTI-PAGE PDF IMPORT STUDIO & KEYFRAME ENGINE ---
+
+    fun openPdfImportDialogWithUri(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val tempFile = File(context.cacheDir, "imported_${System.currentTimeMillis()}.pdf")
+                if (inputStream != null) {
+                    FileOutputStream(tempFile).use { out ->
+                        inputStream.copyTo(out)
+                    }
+                    _pdfFile.value = tempFile
+                    val displayName = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported Document.pdf"
+                    _pdfDocumentTitle.value = displayName
+                    _isPdfImportDialogOpen.value = true
+                    showStatus("Loaded $displayName")
+                } else {
+                    showStatus("Failed to open PDF document")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                showStatus("Error loading PDF: ${e.message}")
+            }
+        }
+    }
+
+    fun loadSamplePdfDocument() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                showStatus("Generating 8-Page Storyboard PDF...")
+                val file = PdfEngine.generateSamplePdfFile(getApplication())
+                _pdfFile.value = file
+                _pdfDocumentTitle.value = "Sample Storyboard & Animatic Script (8 Pages)"
+                _isPdfImportDialogOpen.value = true
+                showStatus("Loaded 8-Page Sample Storyboard PDF")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                showStatus("Failed to generate sample PDF: ${e.message}")
+            }
+        }
+    }
+
+    fun closePdfImportDialog() {
+        _isPdfImportDialogOpen.value = false
+    }
+
+    fun commitPdfImport(file: File, config: PdfImportConfig) {
+        viewModelScope.launch(Dispatchers.IO) {
+            showStatus("Rasterizing & Importing ${config.selectedPages.size} PDF Pages...")
+            try {
+                pushHistory()
+                val sessionId = java.util.UUID.randomUUID().toString()
+                val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                val renderer = PdfRenderer(pfd)
+                val renderedBitmaps = mutableListOf<Bitmap>()
+                val sortedPages = config.selectedPages.sorted()
+
+                val maxDim = config.resolutionPreset.maxDimensionPx
+
+                for (pageIndex in sortedPages) {
+                    if (pageIndex in 0 until renderer.pageCount) {
+                        val page = renderer.openPage(pageIndex)
+                        val pw = page.width
+                        val ph = page.height
+                        val scale = min(maxDim.toFloat() / pw, maxDim.toFloat() / ph)
+                        val targetW = (pw * scale).toInt().coerceAtLeast(1)
+                        val targetH = (ph * scale).toInt().coerceAtLeast(1)
+
+                        val rawBmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                        rawBmp.eraseColor(android.graphics.Color.WHITE)
+                        page.render(rawBmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        page.close()
+
+                        val processedBmp = if (config.removeWhiteBackground || config.invertColors) {
+                            PdfEngine.extractWhiteToAlpha(
+                                source = rawBmp,
+                                tolerance = 0.12f,
+                                invert = config.invertColors
+                            )
+                        } else {
+                            rawBmp
+                        }
+
+                        // Store in LRU cache
+                        val cacheKey = "${sessionId}_page_$pageIndex"
+                        PdfEngine.BitmapCache.put(cacheKey, processedBmp)
+                        renderedBitmaps.add(processedBmp)
+                    }
+                }
+
+                if (config.importMode == PdfImportMode.STITCHED_SCROLL && renderedBitmaps.isNotEmpty()) {
+                    val stitched = PdfEngine.stitchPagesVertically(renderedBitmaps, maxWidth = _project.value.canvasWidth)
+                    val stitchedKey = "${sessionId}_stitched"
+                    PdfEngine.BitmapCache.put(stitchedKey, stitched)
+                }
+
+                renderer.close()
+                pfd.close()
+
+                val totalRequiredFrames = when (config.importMode) {
+                    PdfImportMode.SEQUENTIAL_CELS -> (sortedPages.size * config.holdDurationFrames).coerceAtLeast(24)
+                    PdfImportMode.STITCHED_SCROLL -> 96
+                    PdfImportMode.SEPARATE_LAYERS -> max(_project.value.totalFrames, 24)
+                }
+
+                _project.update { p ->
+                    val newTotalFrames = max(p.totalFrames, totalRequiredFrames)
+                    val newLayers = p.layers.toMutableList()
+                    val newCels = p.cels.toMutableList()
+
+                    // If separate layers mode: create layer per page
+                    if (config.importMode == PdfImportMode.SEPARATE_LAYERS) {
+                        for (pageIndex in sortedPages) {
+                            val layerId = "pdf_layer_${pageIndex + 1}"
+                            if (newLayers.none { it.id == layerId }) {
+                                newLayers.add(
+                                    AnimationLayer(
+                                        id = layerId,
+                                        name = "PDF Page ${pageIndex + 1}",
+                                        opacity = 1.0f
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // If linked layer requested: add drawing layer directly above PDF
+                    if (config.createLinkedDrawingLayerAbove) {
+                        val linkedLayerId = "layer_draw_over_pdf_${System.currentTimeMillis() % 1000}"
+                        val linkedLayer = AnimationLayer(
+                            id = linkedLayerId,
+                            name = "Draw & Animate over PDF",
+                            opacity = 1.0f,
+                            onionSkinEnabled = true
+                        )
+                        newLayers.add(linkedLayer)
+                    }
+
+                    // Pre-populate empty drawing cels for all frames
+                    newLayers.forEach { layer ->
+                        for (f in 0 until newTotalFrames) {
+                            if (newCels.none { it.frameIndex == f && it.layerId == layer.id }) {
+                                newCels.add(DrawingCel(frameIndex = f, layerId = layer.id, strokes = emptyList()))
+                            }
+                        }
+                    }
+
+                    val updatedPdfTrack = PdfDocumentTrack(
+                        isEnabled = true,
+                        documentTitle = _pdfDocumentTitle.value,
+                        totalDocumentPages = sortedPages.size,
+                        importMode = config.importMode,
+                        pageIndices = sortedPages,
+                        holdFramesPerPage = config.holdDurationFrames,
+                        removeWhiteBackground = config.removeWhiteBackground,
+                        invertColors = config.invertColors,
+                        opacity = 1.0f,
+                        isUnderlay = !config.paintDirectlyOnPdf,
+                        isPaintDirectlyOnPdf = config.paintDirectlyOnPdf,
+                        stitchedScrollDurationFrames = totalRequiredFrames,
+                        resolutionPreset = config.resolutionPreset,
+                        cacheSessionId = sessionId
+                    )
+
+                    p.copy(
+                        totalFrames = newTotalFrames,
+                        layers = newLayers,
+                        cels = newCels,
+                        pdfTrack = updatedPdfTrack,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                }
+
+                _activeLayerId.value = _project.value.layers.last().id
+                _isPdfImportDialogOpen.value = false
+                showStatus("Imported ${sortedPages.size} PDF Pages to Studio Timeline")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                showStatus("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    fun togglePdfTrack() {
+        _project.update {
+            it.copy(pdfTrack = it.pdfTrack.copy(isEnabled = !it.pdfTrack.isEnabled))
+        }
+        showStatus(if (_project.value.pdfTrack.isEnabled) "PDF Document Track ON" else "PDF Track OFF")
+    }
+
+    fun setPdfTrackOpacity(opacity: Float) {
+        _project.update {
+            it.copy(pdfTrack = it.pdfTrack.copy(opacity = opacity.coerceIn(0.05f, 1f)))
+        }
+    }
+
+    fun togglePaintDirectlyOnPdf() {
+        _project.update {
+            val curr = it.pdfTrack.isPaintDirectlyOnPdf
+            it.copy(pdfTrack = it.pdfTrack.copy(isPaintDirectlyOnPdf = !curr, isUnderlay = curr))
+        }
+        showStatus(if (_project.value.pdfTrack.isPaintDirectlyOnPdf) "Painting Directly on PDF Layer" else "Drawing on Layer Above PDF")
     }
 
     // --- AUDIO TRACK & WAVEFORM ENGINE ---

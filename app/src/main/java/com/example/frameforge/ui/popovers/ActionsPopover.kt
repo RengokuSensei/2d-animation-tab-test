@@ -20,10 +20,12 @@ import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
@@ -80,6 +82,8 @@ fun ActionsPopover(
     onSaveProject: () -> Unit,
     onImportVideoRotoscoping: () -> Unit,
     onImportAudioTrack: () -> Unit,
+    onImportPdfDocument: () -> Unit = {},
+    onLoadSamplePdf: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -133,6 +137,12 @@ fun ActionsPopover(
             // TAB 1: ADD
             if (activeTab == ActionsTab.ADD) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionRowButton("Import PDF Document (Pages to Video / Layers)", Icons.Default.PictureAsPdf) {
+                        onImportPdfDocument()
+                    }
+                    ActionRowButton("Load Sample Storyboard PDF (8 Pages)", Icons.Default.Description) {
+                        onLoadSamplePdf()
+                    }
                     ActionRowButton("Import Video for Rotoscoping (4K MP4/MKV)", Icons.Default.Movie) {
                         onImportVideoRotoscoping()
                     }

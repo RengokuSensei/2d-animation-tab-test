@@ -109,6 +109,7 @@ data class AnimationProject(
     val boneKeyframes: List<BoneKeyframe> = emptyList(),
     val videoTrack: VideoRotoscopingTrack = VideoRotoscopingTrack(),
     val audioTrack: AudioTrack = AudioTrack(),
+    val pdfTrack: com.example.frameforge.pdf.PdfDocumentTrack = com.example.frameforge.pdf.PdfDocumentTrack(),
     val objectTracks: List<ObjectTransformTrack> = listOf(
         ObjectTransformTrack("layer_sketch", "Rough Sketch Track"),
         ObjectTransformTrack("layer_ink", "Line Art Track")

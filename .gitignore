@@ -1,0 +1,49 @@
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+app/build/
+.build-outputs/
+
+# Gradle files
+.gradle/
+
+# Local configuration file
+local.properties
+
+# Log Files
+*.log
+*.hprof
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# IntelliJ IDEA
+*.iml
+.idea/
+
+# Keystore files
+*.jks
+*.keystore
+debug.keystore
+debug.keystore.base64
+
+# External native build folder
+.cxx/
+.externalNativeBuild/

@@ -76,6 +76,37 @@ object DrawingEngine {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = stroke.size
             paint.alpha = (stroke.opacity * 128).toInt().coerceIn(1, 255)
+        } else if (stroke.toolType == ToolType.HIGHLIGHTER) {
+            // Smart highlighter: Multiply blend preserves dark text/ink on PDF pages
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = stroke.size * 1.35f
+            paint.strokeCap = Paint.Cap.SQUARE
+            paint.color = stroke.colorArgb
+            paint.alpha = (Color.alpha(stroke.colorArgb) * stroke.opacity * 0.85f).toInt().coerceIn(1, 255)
+            val path = buildSmoothPath(points)
+            canvas.drawPath(path, paint)
+            return
+        } else if (stroke.toolType == ToolType.LASER_POINTER) {
+            // Glowing neon laser pointer with soft aura
+            val outerPaint = Paint(paint).apply {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
+                style = Paint.Style.STROKE
+                strokeWidth = stroke.size * 2.2f
+                color = stroke.colorArgb
+                alpha = (stroke.opacity * 90).toInt().coerceIn(1, 255)
+            }
+            val corePaint = Paint(paint).apply {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD)
+                style = Paint.Style.STROKE
+                strokeWidth = max(2f, stroke.size * 0.5f)
+                color = Color.WHITE
+                alpha = (stroke.opacity * 240).toInt().coerceIn(1, 255)
+            }
+            val path = buildSmoothPath(points)
+            canvas.drawPath(path, outerPaint)
+            canvas.drawPath(path, corePaint)
+            return
         } else if (stroke.toolType == ToolType.SMUDGE || stroke.isSmudge) {
             // Smudge blend mode: pulls and dilutes colors
             paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_OVER)
@@ -186,6 +217,58 @@ object DrawingEngine {
     }
 
     /**
+     * Renders an imported PDF document track frame (page or scroll strip)
+     */
+    fun renderPdfTrackFrame(
+        canvas: Canvas,
+        docWidth: Int,
+        docHeight: Int,
+        frameIndex: Int,
+        totalFrames: Int,
+        track: com.example.frameforge.pdf.PdfDocumentTrack
+    ) {
+        if (!track.isEnabled || track.pageIndices.isEmpty()) return
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            alpha = (track.opacity * 255).toInt().coerceIn(0, 255)
+        }
+
+        when (track.importMode) {
+            com.example.frameforge.pdf.PdfImportMode.STITCHED_SCROLL -> {
+                val stitchedKey = "${track.cacheSessionId}_stitched"
+                val bmp = com.example.frameforge.pdf.PdfEngine.BitmapCache.get(stitchedKey)
+                if (bmp != null) {
+                    val scale = docWidth.toFloat() / bmp.width.coerceAtLeast(1)
+                    val totalH = bmp.height * scale
+                    val scrollRange = max(0f, totalH - docHeight)
+                    val progress = if (totalFrames > 1) frameIndex.toFloat() / (totalFrames - 1) else 0f
+                    val scrollY = -scrollRange * progress.coerceIn(0f, 1f)
+
+                    val destRect = RectF(0f, scrollY, docWidth.toFloat(), scrollY + totalH)
+                    canvas.drawBitmap(bmp, null, destRect, paint)
+                }
+            }
+            else -> {
+                // Sequential cels or separate layers
+                val hold = track.holdFramesPerPage.coerceAtLeast(1)
+                val pageIndexInList = (frameIndex / hold).coerceIn(0, track.pageIndices.lastIndex)
+                val targetPageIndex = track.pageIndices[pageIndexInList]
+                val cacheKey = "${track.cacheSessionId}_page_$targetPageIndex"
+                val bmp = com.example.frameforge.pdf.PdfEngine.BitmapCache.get(cacheKey)
+                if (bmp != null) {
+                    val scale = min(docWidth.toFloat() / bmp.width, docHeight.toFloat() / bmp.height)
+                    val w = bmp.width * scale
+                    val h = bmp.height * scale
+                    val left = (docWidth - w) / 2f
+                    val top = (docHeight - h) / 2f
+                    val destRect = RectF(left, top, left + w, top + h)
+                    canvas.drawBitmap(bmp, null, destRect, paint)
+                }
+            }
+        }
+    }
+
+    /**
      * Composites all active layers for a given frame index into a target Bitmap
      */
     fun compositeFrame(
@@ -195,7 +278,9 @@ object DrawingEngine {
         layers: List<AnimationLayer>,
         cels: List<DrawingCel>,
         backgroundColor: Int? = null,
-        targetBitmap: Bitmap? = null
+        targetBitmap: Bitmap? = null,
+        pdfTrack: com.example.frameforge.pdf.PdfDocumentTrack? = null,
+        totalFrames: Int = 24
     ): Bitmap {
         val bmp = targetBitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -204,6 +289,11 @@ object DrawingEngine {
             canvas.drawColor(backgroundColor)
         } else {
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        }
+
+        // Draw PDF Track Underlay if enabled
+        if (pdfTrack != null && pdfTrack.isEnabled && pdfTrack.isUnderlay) {
+            renderPdfTrackFrame(canvas, width, height, frameIndex, totalFrames, pdfTrack)
         }
 
         val celsByLayer = cels.filter { it.frameIndex == frameIndex }.associateBy { it.layerId }
@@ -243,6 +333,11 @@ object DrawingEngine {
                     renderStroke(canvas, s)
                 }
             }
+        }
+
+        // Draw PDF Track Overlay if enabled
+        if (pdfTrack != null && pdfTrack.isEnabled && !pdfTrack.isUnderlay) {
+            renderPdfTrackFrame(canvas, width, height, frameIndex, totalFrames, pdfTrack)
         }
 
         return bmp
@@ -347,7 +442,7 @@ object DrawingEngine {
         visited[startY * w + startX] = true
 
         while (!queue.isEmpty()) {
-            val p = queue.poll()
+            val p = queue.poll() ?: break
             val x = p and 0xFFFF
             val y = p ushr 16
 
