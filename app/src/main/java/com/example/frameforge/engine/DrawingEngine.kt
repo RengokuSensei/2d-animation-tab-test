@@ -166,13 +166,27 @@ object DrawingEngine {
                     canvas.drawCircle(points[0].x, points[0].y, (stroke.size * points[0].pressure) / 2f, paint)
                 } else {
                     paint.style = Paint.Style.STROKE
-                    for (i in 0 until points.size - 1) {
-                        val p1 = points[i]
-                        val p2 = points[i + 1]
-                        val avgPressure = (p1.pressure + p2.pressure) / 2f
+                    paint.strokeCap = Paint.Cap.ROUND
+                    paint.strokeJoin = Paint.Join.ROUND
+                    
+                    var pPrev = points[0]
+                    for (i in 1 until points.size) {
+                        val pCurr = points[i]
+                        val midX = (pPrev.x + pCurr.x) / 2f
+                        val midY = (pPrev.y + pCurr.y) / 2f
+                        val avgPressure = (pPrev.pressure + pCurr.pressure) / 2f
                         paint.strokeWidth = max(1.5f, stroke.size * avgPressure)
-                        canvas.drawLine(p1.x, p1.y, p2.x, p2.y, paint)
+                        
+                        val path = Path().apply {
+                            moveTo(pPrev.x, pPrev.y)
+                            quadTo(pPrev.x, pPrev.y, midX, midY)
+                        }
+                        canvas.drawPath(path, paint)
+                        pPrev = StrokePoint(midX, midY, avgPressure)
                     }
+                    val last = points.last()
+                    paint.strokeWidth = max(1.5f, stroke.size * last.pressure)
+                    canvas.drawLine(pPrev.x, pPrev.y, last.x, last.y, paint)
                 }
             }
             ToolType.PENCIL -> {

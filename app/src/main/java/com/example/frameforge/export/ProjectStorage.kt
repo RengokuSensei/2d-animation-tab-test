@@ -101,6 +101,32 @@ class ProjectStorage(private val context: Context) {
         }
     }
 
+    fun exportMp4Streaming(
+        width: Int,
+        height: Int,
+        fps: Int,
+        totalFrames: Int,
+        frameProvider: (frameIndex: Int) -> Bitmap?
+    ): File? {
+        if (totalFrames <= 0) return null
+        return try {
+            val outFile = File(exportDir, "animation_${System.currentTimeMillis()}.mp4")
+            val encoder = Mp4Encoder()
+            val success = encoder.encodeStreamingMp4(
+                outputFile = outFile,
+                width = width,
+                height = height,
+                totalFrames = totalFrames,
+                fps = fps,
+                frameProvider = frameProvider
+            )
+            if (success && outFile.exists() && outFile.length() > 0) outFile else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     fun exportPngSequence(frames: List<Bitmap>): List<File> {
         val result = mutableListOf<File>()
         val batchDir = File(exportDir, "seq_${System.currentTimeMillis()}").apply { mkdirs() }
@@ -109,6 +135,24 @@ class ProjectStorage(private val context: Context) {
             FileOutputStream(f).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
+            result.add(f)
+        }
+        return result
+    }
+
+    fun exportPngSequenceStreaming(
+        totalFrames: Int,
+        frameProvider: (frameIndex: Int) -> Bitmap?
+    ): List<File> {
+        val result = mutableListOf<File>()
+        val batchDir = File(exportDir, "seq_${System.currentTimeMillis()}").apply { mkdirs() }
+        for (index in 0 until totalFrames) {
+            val bitmap = frameProvider(index) ?: continue
+            val f = File(batchDir, "frame_%04d.png".format(index + 1))
+            FileOutputStream(f).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            bitmap.recycle()
             result.add(f)
         }
         return result

@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -97,7 +100,26 @@ fun ProcreateTimeline(
     onSelectClip: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val reelScrollState = rememberScrollState()
+    val lazyListState = rememberLazyListState()
+
+    LaunchedEffect(currentFrame) {
+        val layoutInfo = lazyListState.layoutInfo
+        val visibleIndices = layoutInfo.visibleItemsInfo.map { it.index }
+        if (currentFrame !in visibleIndices && project.totalFrames > 0) {
+            val target = (currentFrame - 2).coerceAtLeast(0)
+            lazyListState.animateScrollToItem(target)
+        }
+    }
+
+    val strokeCountByFrame = remember(project.cels, project.totalFrames) {
+        val counts = IntArray(project.totalFrames)
+        for (cel in project.cels) {
+            if (cel.frameIndex in 0 until project.totalFrames) {
+                counts[cel.frameIndex] += cel.strokes.size
+            }
+        }
+        counts
+    }
 
     Surface(
         modifier = modifier
@@ -310,17 +332,15 @@ fun ProcreateTimeline(
             Spacer(modifier = Modifier.height(6.dp))
 
             // --- ANIMATION ASSIST FILMSTRIP (FRAME CEL CARDS) ---
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(reelScrollState),
+            LazyRow(
+                state = lazyListState,
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                for (frameIdx in 0 until project.totalFrames) {
+                items(count = project.totalFrames, key = { it }) { frameIdx ->
                     val isSelected = frameIdx == currentFrame
-                    val celsOnFrame = project.cels.filter { it.frameIndex == frameIdx }
-                    val totalStrokes = celsOnFrame.sumOf { it.strokes.size }
+                    val totalStrokes = if (frameIdx < strokeCountByFrame.size) strokeCountByFrame[frameIdx] else 0
 
                     Card(
                         modifier = Modifier
@@ -371,15 +391,17 @@ fun ProcreateTimeline(
                 }
 
                 // Add Frame trailing button
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x22FFFFFF))
-                        .clickable { onAddFrame() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Frame", tint = Color.LightGray, modifier = Modifier.size(18.dp))
+                item(key = "add_frame_button") {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x22FFFFFF))
+                            .clickable { onAddFrame() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Frame", tint = Color.LightGray, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
 

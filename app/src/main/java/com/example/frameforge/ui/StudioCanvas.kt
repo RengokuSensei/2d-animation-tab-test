@@ -96,6 +96,7 @@ fun StudioCanvas(
     isReferenceCompanionOpen: Boolean = false,
     onStartStroke: (Float, Float, Float) -> Unit,
     onUpdateStroke: (Float, Float, Float) -> Unit,
+    onUpdateStrokeBatch: (List<com.example.frameforge.model.StrokePoint>) -> Unit = { pts -> for (p in pts) onUpdateStroke(p.x, p.y, p.pressure) },
     onFinishStroke: () -> Unit,
     onSelectBone: (String?) -> Unit,
     onSolveIk: (Float, Float) -> Unit,
@@ -111,6 +112,7 @@ fun StudioCanvas(
     var offsetY by remember { mutableFloatStateOf(0f) }
 
     var isTransforming by remember { mutableStateOf(false) }
+    var isStylusStrokeInProgress by remember { mutableStateOf(false) }
 
     fun mapPressure(raw: Float): Float {
         val p = raw.coerceIn(0.05f, 1.0f)
@@ -160,12 +162,16 @@ fun StudioCanvas(
                 .pointerInteropFilter { motionEvent ->
                     val toolType = motionEvent.getToolType(0)
                     val isStylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
-                    val isLargeContact = motionEvent.touchMajor > 45f
+                    val isLargeContact = motionEvent.touchMajor > 40f
 
+                    // Smart Palm Rejection:
+                    // 1. If STYLUS_ONLY, any non-stylus is rejected.
+                    // 2. If AUTOMATIC, reject if large palm contact or if a stylus stroke is already in progress,
+                    //    or if multiple fingers are touching (pinching/panning).
                     val reject = when (palmRejectionMode) {
                         PalmRejectionMode.STYLUS_ONLY -> !isStylus
-                        PalmRejectionMode.AUTOMATIC -> isLargeContact && !isStylus
-                        PalmRejectionMode.FINGER_AND_STYLUS -> false
+                        PalmRejectionMode.AUTOMATIC -> (!isStylus && (isLargeContact || isStylusStrokeInProgress || motionEvent.pointerCount > 1))
+                        PalmRejectionMode.FINGER_AND_STYLUS -> motionEvent.pointerCount > 1
                     }
 
                     // If adjustment mode is active, dragging left/right adjusts intensity dynamically
@@ -181,6 +187,7 @@ fun StudioCanvas(
                         MotionEvent.ACTION_DOWN -> {
                             if (motionEvent.pointerCount == 1 && !reject) {
                                 isTransforming = false
+                                if (isStylus) isStylusStrokeInProgress = true
                                 val docPt = screenToDoc(motionEvent.x, motionEvent.y)
                                 val pressure = mapPressure(motionEvent.pressure)
 
@@ -199,16 +206,27 @@ fun StudioCanvas(
                         }
                         MotionEvent.ACTION_MOVE -> {
                             if (motionEvent.pointerCount == 1 && !isTransforming && !reject) {
-                                val docPt = screenToDoc(motionEvent.x, motionEvent.y)
-                                val pressure = mapPressure(motionEvent.pressure)
-
                                 if (currentTool == ToolType.BONE_RIG && isIkMode) {
+                                    val docPt = screenToDoc(motionEvent.x, motionEvent.y)
                                     onSolveIk(docPt.x, docPt.y)
                                 } else if (currentTool != ToolType.BONE_RIG) {
-                                    onUpdateStroke(docPt.x, docPt.y, pressure)
+                                    // 144Hz Stylus Precision: Extract all intermediate historical samples
+                                    val batch = mutableListOf<com.example.frameforge.model.StrokePoint>()
+                                    val historyCount = motionEvent.historySize
+                                    for (h in 0 until historyCount) {
+                                        val hDocPt = screenToDoc(motionEvent.getHistoricalX(h), motionEvent.getHistoricalY(h))
+                                        val hPressure = mapPressure(motionEvent.getHistoricalPressure(h))
+                                        batch.add(com.example.frameforge.model.StrokePoint(hDocPt.x, hDocPt.y, hPressure))
+                                    }
+                                    val currDocPt = screenToDoc(motionEvent.x, motionEvent.y)
+                                    val currPressure = mapPressure(motionEvent.pressure)
+                                    batch.add(com.example.frameforge.model.StrokePoint(currDocPt.x, currDocPt.y, currPressure))
+
+                                    onUpdateStrokeBatch(batch)
                                 }
                             } else if (motionEvent.pointerCount > 1) {
                                 isTransforming = true
+                                isStylusStrokeInProgress = false
                             }
                             true
                         }
@@ -217,6 +235,7 @@ fun StudioCanvas(
                                 onFinishStroke()
                             }
                             isTransforming = false
+                            isStylusStrokeInProgress = false
                             true
                         }
                         else -> false

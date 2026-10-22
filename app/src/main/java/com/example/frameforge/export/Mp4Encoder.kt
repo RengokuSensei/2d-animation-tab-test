@@ -145,4 +145,143 @@ class Mp4Encoder {
             }
         }
     }
+
+    /**
+     * Memory-safe streaming MP4 encoder.
+     * Evaluates frames on-demand via [frameProvider] and immediately recycles each Bitmap,
+     * maintaining strictly O(1) memory footprint for animations of arbitrary length.
+     */
+    fun encodeStreamingMp4(
+        outputFile: File,
+        width: Int,
+        height: Int,
+        totalFrames: Int,
+        fps: Int = 24,
+        bitRate: Int = 4_000_000,
+        frameProvider: (frameIndex: Int) -> Bitmap?
+    ): Boolean {
+        if (totalFrames <= 0 || width <= 0 || height <= 0) return false
+
+        val encWidth = (width / 2) * 2
+        val encHeight = (height / 2) * 2
+
+        val mimeType = MediaFormat.MIMETYPE_VIDEO_AVC
+        val frameDurationUs = (1_000_000L / fps.coerceAtLeast(1))
+
+        var mediaCodec: MediaCodec? = null
+        var mediaMuxer: MediaMuxer? = null
+        var inputSurface: Surface? = null
+
+        try {
+            val format = MediaFormat.createVideoFormat(mimeType, encWidth, encHeight).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            }
+
+            mediaCodec = MediaCodec.createEncoderByType(mimeType)
+            mediaCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            inputSurface = mediaCodec.createInputSurface()
+            mediaCodec.start()
+
+            mediaMuxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+
+            var trackIndex = -1
+            var muxerStarted = false
+            val bufferInfo = MediaCodec.BufferInfo()
+
+            for (i in 0 until totalFrames) {
+                val frame = frameProvider(i) ?: break
+
+                val surfaceCanvas = inputSurface.lockHardwareCanvas()
+                surfaceCanvas.drawColor(Color.WHITE)
+                if (frame.width != encWidth || frame.height != encHeight) {
+                    val scaled = Bitmap.createScaledBitmap(frame, encWidth, encHeight, true)
+                    surfaceCanvas.drawBitmap(scaled, 0f, 0f, null)
+                    if (scaled != frame) {
+                        scaled.recycle()
+                    }
+                } else {
+                    surfaceCanvas.drawBitmap(frame, 0f, 0f, null)
+                }
+                inputSurface.unlockCanvasAndPost(surfaceCanvas)
+
+                // Immediately recycle frame to preserve RAM
+                frame.recycle()
+
+                // Drain encoder
+                while (true) {
+                    val encoderStatus = mediaCodec.dequeueOutputBuffer(bufferInfo, 10_000L)
+                    if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        break
+                    } else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        if (muxerStarted) {
+                            throw RuntimeException("Format changed after muxer started")
+                        }
+                        val newFormat = mediaCodec.outputFormat
+                        trackIndex = mediaMuxer.addTrack(newFormat)
+                        mediaMuxer.start()
+                        muxerStarted = true
+                    } else if (encoderStatus >= 0) {
+                        val encodedData = mediaCodec.getOutputBuffer(encoderStatus)
+                            ?: throw RuntimeException("Encoder buffer was null")
+
+                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                            bufferInfo.size = 0
+                        }
+
+                        if (bufferInfo.size != 0 && muxerStarted) {
+                            encodedData.position(bufferInfo.offset)
+                            encodedData.limit(bufferInfo.offset + bufferInfo.size)
+                            bufferInfo.presentationTimeUs = i * frameDurationUs
+                            mediaMuxer.writeSampleData(trackIndex, encodedData, bufferInfo)
+                        }
+
+                        mediaCodec.releaseOutputBuffer(encoderStatus, false)
+                    }
+                }
+            }
+
+            // Signal End of Stream
+            mediaCodec.signalEndOfInputStream()
+
+            // Final drain
+            var eos = false
+            while (!eos) {
+                val status = mediaCodec.dequeueOutputBuffer(bufferInfo, 20_000L)
+                if (status == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    break
+                } else if (status >= 0) {
+                    val encodedData = mediaCodec.getOutputBuffer(status)
+                    if (encodedData != null && bufferInfo.size != 0 && muxerStarted) {
+                        encodedData.position(bufferInfo.offset)
+                        encodedData.limit(bufferInfo.offset + bufferInfo.size)
+                        mediaMuxer.writeSampleData(trackIndex, encodedData, bufferInfo)
+                    }
+                    mediaCodec.releaseOutputBuffer(status, false)
+                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        eos = true
+                    }
+                }
+            }
+
+            return true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        } finally {
+            try {
+                inputSurface?.release()
+                mediaCodec?.stop()
+                mediaCodec?.release()
+                if (mediaMuxer != null) {
+                    try { mediaMuxer.stop() } catch (_: Exception) {}
+                    mediaMuxer.release()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 }

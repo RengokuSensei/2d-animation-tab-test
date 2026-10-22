@@ -408,8 +408,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateStroke(x: Float, y: Float, pressure: Float) {
+        updateStrokeBatch(listOf(StrokePoint(x, y, pressure)))
+    }
+
+    fun updateStrokeBatch(points: List<StrokePoint>) {
         val curr = _currentStroke.value ?: return
-        val updatedPoints = curr.points + StrokePoint(x, y, pressure)
+        if (points.isEmpty()) return
+        val updatedPoints = ArrayList<StrokePoint>(curr.points.size + points.size).apply {
+            addAll(curr.points)
+            addAll(points)
+        }
         _currentStroke.value = curr.copy(points = updatedPoints)
     }
 
@@ -841,8 +849,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun exportGif(withBackground: Boolean = true, onComplete: (File?) -> Unit) {
-        viewModelScope.launch {
-            showStatus("Rendering GIF frames...")
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { showStatus("Rendering GIF frames...") }
             val p = _project.value
             val renderedFrames = mutableListOf<Bitmap>()
             val bgColor = if (withBackground) android.graphics.Color.WHITE else null
@@ -862,67 +870,75 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             val file = storage.exportGif(renderedFrames, p.fps)
-            if (file != null) {
-                showStatus("GIF Exported: ${file.name}")
-            } else {
-                showStatus("GIF Export failed")
+            withContext(Dispatchers.Main) {
+                if (file != null) {
+                    showStatus("GIF Exported: ${file.name}")
+                } else {
+                    showStatus("GIF Export failed")
+                }
+                onComplete(file)
             }
-            onComplete(file)
         }
     }
 
     fun exportPngSequence(onComplete: (List<File>) -> Unit) {
-        viewModelScope.launch {
-            showStatus("Exporting PNG sequence...")
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { showStatus("Exporting PNG sequence...") }
             val p = _project.value
-            val renderedFrames = mutableListOf<Bitmap>()
 
-            for (f in 0 until p.totalFrames) {
-                val bmp = DrawingEngine.compositeFrame(
+            val files = storage.exportPngSequenceStreaming(
+                totalFrames = p.totalFrames
+            ) { frameIndex ->
+                DrawingEngine.compositeFrame(
                     width = p.canvasWidth,
                     height = p.canvasHeight,
-                    frameIndex = f,
-                    layers = p.layers,
-                    cels = p.cels,
-                    pdfTrack = p.pdfTrack,
-                    totalFrames = p.totalFrames
-                )
-                renderedFrames.add(bmp)
-            }
-
-            val files = storage.exportPngSequence(renderedFrames)
-            showStatus("Exported ${files.size} PNG frames")
-            onComplete(files)
-        }
-    }
-
-    fun exportMp4(onComplete: (File?) -> Unit) {
-        viewModelScope.launch {
-            showStatus("Encoding MP4 Video...")
-            val p = _project.value
-            val renderedFrames = mutableListOf<Bitmap>()
-
-            for (f in 0 until p.totalFrames) {
-                val bmp = DrawingEngine.compositeFrame(
-                    width = p.canvasWidth,
-                    height = p.canvasHeight,
-                    frameIndex = f,
+                    frameIndex = frameIndex,
                     layers = p.layers,
                     cels = p.cels,
                     backgroundColor = android.graphics.Color.WHITE,
                     pdfTrack = p.pdfTrack,
                     totalFrames = p.totalFrames
                 )
-                renderedFrames.add(bmp)
             }
 
-            val file = storage.exportMp4(renderedFrames, p.fps)
-            if (file != null) {
-                showStatus("MP4 Video Exported: ${file.name}")
-            } else {
-                showStatus("MP4 Export failed")
+            withContext(Dispatchers.Main) {
+                showStatus("Exported ${files.size} PNG frames")
+                onComplete(files)
             }
-            onComplete(file)
+        }
+    }
+
+    fun exportMp4(onComplete: (File?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { showStatus("Encoding MP4 Video...") }
+            val p = _project.value
+
+            val file = storage.exportMp4Streaming(
+                width = p.canvasWidth,
+                height = p.canvasHeight,
+                fps = p.fps,
+                totalFrames = p.totalFrames
+            ) { frameIndex ->
+                DrawingEngine.compositeFrame(
+                    width = p.canvasWidth,
+                    height = p.canvasHeight,
+                    frameIndex = frameIndex,
+                    layers = p.layers,
+                    cels = p.cels,
+                    backgroundColor = android.graphics.Color.WHITE,
+                    pdfTrack = p.pdfTrack,
+                    totalFrames = p.totalFrames
+                )
+            }
+
+            withContext(Dispatchers.Main) {
+                if (file != null) {
+                    showStatus("MP4 Video Exported: ${file.name}")
+                } else {
+                    showStatus("MP4 Export failed")
+                }
+                onComplete(file)
+            }
         }
     }
 

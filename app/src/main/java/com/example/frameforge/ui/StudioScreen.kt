@@ -182,6 +182,7 @@ fun StudioScreen(
                     isReferenceCompanionOpen = isReferenceCompanionOpen,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
                     onUpdateStroke = { x, y, p -> viewModel.updateStroke(x, y, p) },
+                    onUpdateStrokeBatch = { pts -> viewModel.updateStrokeBatch(pts) },
                     onFinishStroke = { viewModel.finishStroke() },
                     onSelectBone = { viewModel.setSelectedBone(it) },
                     onSolveIk = { x, y -> viewModel.solveIkForLimb(x, y) },
