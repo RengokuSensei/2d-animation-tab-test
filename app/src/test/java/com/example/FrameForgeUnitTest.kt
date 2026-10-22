@@ -257,4 +257,92 @@ class FrameForgeUnitTest {
         val hasSpecialFx = brushes.any { it.category == com.example.frameforge.model.BrushCategory.SPECIAL_FX }
         assertTrue("Should include Special FX brush category", hasSpecialFx)
     }
+
+    @Test
+    fun testRoughShapeGenerator() {
+        val rect = com.example.frameforge.ai.RoughShapeGenerator.createRoughRectangle(
+            x = 100f, y = 100f, width = 200f, height = 150f,
+            roughness = 1.2f, fillStyle = com.example.frameforge.ai.RoughFillStyle.HACHURE
+        )
+        assertTrue("Rough rectangle should generate multiple strokes", rect.isNotEmpty())
+        rect.forEach { stroke ->
+            assertTrue("Stroke should contain points", stroke.points.isNotEmpty())
+        }
+
+        val diamond = com.example.frameforge.ai.RoughShapeGenerator.createRoughDiamond(
+            centerX = 200f, centerY = 200f, width = 160f, height = 120f
+        )
+        assertTrue("Rough diamond should generate strokes", diamond.isNotEmpty())
+
+        val ellipse = com.example.frameforge.ai.RoughShapeGenerator.createRoughEllipse(
+            centerX = 200f, centerY = 200f, radiusX = 80f, radiusY = 60f
+        )
+        assertTrue("Rough ellipse should generate strokes", ellipse.isNotEmpty())
+
+        val arrow = com.example.frameforge.ai.RoughShapeGenerator.createRoughArrow(
+            x1 = 50f, y1 = 50f, x2 = 250f, y2 = 150f, curved = true, label = "Flow"
+        )
+        assertTrue("Rough arrow should generate stem and head strokes", arrow.size >= 3)
+
+        val note = com.example.frameforge.ai.RoughShapeGenerator.createRoughStickyNote(
+            x = 100f, y = 100f, width = 150f, height = 150f, text = "Sprint Plan"
+        )
+        assertTrue("Rough sticky note should generate border, fold, and fill", note.isNotEmpty())
+    }
+
+    @Test
+    fun testMermaidDiagramParserAndLayout() {
+        val mermaidCode = """
+            flowchart TD
+                Client[Mobile Client App] --> Auth{Authenticate}
+                Auth -->|Success| DB[(User Database)]
+                Auth -->|Failure| Error([Error Page])
+        """.trimIndent()
+
+        val parsed = com.example.frameforge.ai.MermaidDiagramEngine.parseMermaid(mermaidCode)
+        assertEquals("TD", parsed.direction)
+        assertEquals(4, parsed.nodes.size)
+        assertEquals(3, parsed.edges.size)
+
+        assertEquals(com.example.frameforge.ai.ExcalidrawShapeType.RECTANGLE, parsed.nodes["Client"]?.shape)
+        assertEquals(com.example.frameforge.ai.ExcalidrawShapeType.DIAMOND, parsed.nodes["Auth"]?.shape)
+        assertEquals(com.example.frameforge.ai.ExcalidrawShapeType.CYLINDER, parsed.nodes["DB"]?.shape)
+
+        val strokes = com.example.frameforge.ai.MermaidDiagramEngine.renderDiagramToStrokes(parsed)
+        assertTrue("Rendering diagram should produce vector strokes", strokes.size > 10)
+    }
+
+    @Test
+    fun testWireframeToCodeEnginePresets() {
+        val loginResult = kotlinx.coroutines.runBlocking {
+            com.example.frameforge.ai.WireframeToCodeEngine.convertWireframeToCompose(
+                "Login with email and password",
+                com.example.frameforge.ai.WireframePreset.LOGIN_AUTH
+            )
+        }
+        assertNotNull(loginResult.composeCode)
+        assertTrue("Generated code should contain @Composable", loginResult.composeCode.contains("@Composable"))
+        assertTrue("Generated code should contain OutlinedTextField", loginResult.composeCode.contains("OutlinedTextField"))
+        assertTrue("Wireframe mockup should generate sketched strokes", loginResult.wireframeStrokes.isNotEmpty())
+
+        val feedResult = kotlinx.coroutines.runBlocking {
+            com.example.frameforge.ai.WireframeToCodeEngine.convertWireframeToCompose(
+                "Social media feed card",
+                com.example.frameforge.ai.WireframePreset.SOCIAL_FEED
+            )
+        }
+        assertTrue("Generated code should contain SocialFeedCard", feedResult.composeCode.contains("SocialFeedCard"))
+        assertTrue("Feed card should include testTag", feedResult.composeCode.contains("testTag"))
+    }
+
+    @Test
+    fun testTextToDiagramOfflineFallback() {
+        val authMermaid = com.example.frameforge.ai.TextToDiagramEngine.generateOfflineMermaid("User login and authentication token flow")
+        assertTrue(authMermaid.contains("flowchart"))
+        assertTrue(authMermaid.contains("AuthServer") || authMermaid.contains("User"))
+
+        val k8sMermaid = com.example.frameforge.ai.TextToDiagramEngine.generateOfflineMermaid("Kubernetes pod container cluster deployment")
+        assertTrue(k8sMermaid.contains("Ingress") || k8sMermaid.contains("Pod"))
+    }
 }
+

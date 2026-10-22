@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Description
@@ -84,6 +85,7 @@ fun ActionsPopover(
     onImportAudioTrack: () -> Unit,
     onImportPdfDocument: () -> Unit = {},
     onLoadSamplePdf: () -> Unit = {},
+    onOpenExcalidrawStudio: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -137,6 +139,9 @@ fun ActionsPopover(
             // TAB 1: ADD
             if (activeTab == ActionsTab.ADD) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionRowButton("Excalidraw AI Studio (Text to Diagram / Mermaid / Code)", Icons.Default.AutoAwesome) {
+                        onOpenExcalidrawStudio()
+                    }
                     ActionRowButton("Import PDF Document (Pages to Video / Layers)", Icons.Default.PictureAsPdf) {
                         onImportPdfDocument()
                     }

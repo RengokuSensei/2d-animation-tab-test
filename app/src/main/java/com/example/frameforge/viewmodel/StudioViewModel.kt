@@ -222,6 +222,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _pdfDocumentTitle = MutableStateFlow("Document.pdf")
     val pdfDocumentTitle: StateFlow<String> = _pdfDocumentTitle.asStateFlow()
 
+    // --- EXCALIDRAW SMART STUDIO STATE ---
+    private val _isExcalidrawModalOpen = MutableStateFlow(false)
+    val isExcalidrawModalOpen: StateFlow<Boolean> = _isExcalidrawModalOpen.asStateFlow()
+
 
     // Undo / Redo history
     private val undoStack = Stack<AnimationProject>()
@@ -1447,6 +1451,36 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun resetTransform() {
         _transformState.value = TransformState(isActive = true)
         showStatus("Transform Reset")
+    }
+
+    // --- EXCALIDRAW STUDIO METHODS ---
+    fun toggleExcalidrawModal() {
+        _isExcalidrawModalOpen.update { !it }
+    }
+
+    fun closeExcalidrawModal() {
+        _isExcalidrawModalOpen.value = false
+    }
+
+    fun stampStrokesOntoActiveLayer(strokes: List<DrawingStroke>, description: String) {
+        if (strokes.isEmpty()) return
+        pushHistory()
+        val frame = _currentFrame.value
+        val layerId = _activeLayerId.value
+
+        _project.update { p ->
+            val existingCel = p.cels.find { it.frameIndex == frame && it.layerId == layerId }
+            val newCels = p.cels.toMutableList()
+            if (existingCel != null) {
+                val updatedCel = existingCel.copy(strokes = existingCel.strokes + strokes)
+                val idx = newCels.indexOf(existingCel)
+                newCels[idx] = updatedCel
+            } else {
+                newCels.add(DrawingCel(frameIndex = frame, layerId = layerId, strokes = strokes))
+            }
+            p.copy(cels = newCels)
+        }
+        showStatus(description)
     }
 }
 

@@ -20,6 +20,7 @@ app/build/
 
 # Gradle files
 .gradle/
+.kotlin/
 
 # Local configuration file
 local.properties

@@ -87,6 +87,7 @@ fun StudioScreen(
     val isPdfImportDialogOpen by viewModel.isPdfImportDialogOpen.collectAsState()
     val pdfFile by viewModel.pdfFile.collectAsState()
     val pdfDocumentTitle by viewModel.pdfDocumentTitle.collectAsState()
+    val isExcalidrawModalOpen by viewModel.isExcalidrawModalOpen.collectAsState()
 
     val pdfPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -98,10 +99,11 @@ fun StudioScreen(
 
     val hasModalOpen = isGalleryDialogOpen || isActionsPopoverOpen || isAdjustmentsPopoverOpen ||
         isBrushStudioOpen || isLayersPopoverOpen || isColorPickerOpen ||
-        transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen
+        transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen || isExcalidrawModalOpen
 
     BackHandler(enabled = hasModalOpen) {
         when {
+            isExcalidrawModalOpen -> viewModel.closeExcalidrawModal()
             isPdfImportDialogOpen -> viewModel.closePdfImportDialog()
             isGalleryDialogOpen -> viewModel.toggleGalleryDialog()
             isColorPickerOpen -> viewModel.toggleColorPicker()
@@ -179,11 +181,13 @@ fun StudioScreen(
                 isAnimationAssistVisible = isAnimationAssistVisible,
                 isDreamsTracksVisible = isDreamsMultiTrackVisible,
                 isNodeGraphActive = isNodeGraphViewActive,
+                isExcalidrawOpen = isExcalidrawModalOpen,
                 onGalleryClick = { viewModel.toggleGalleryDialog() },
                 onActionsClick = { viewModel.toggleActionsPopover() },
                 onAdjustmentsClick = { viewModel.toggleAdjustmentsPopover() },
                 onSelectionClick = { viewModel.setSelectionMode(if (selectionState.isActive) com.example.frameforge.model.SelectionMode.NONE else com.example.frameforge.model.SelectionMode.FREEHAND) },
                 onTransformClick = { viewModel.toggleTransformMode() },
+                onExcalidrawClick = { viewModel.toggleExcalidrawModal() },
                 onToggleAnimationAssist = { viewModel.toggleAnimationAssist() },
                 onToggleDreamsTracks = { viewModel.toggleDreamsMultiTrack() },
                 onToggleNodeGraph = { viewModel.toggleNodeGraphView() },
@@ -327,6 +331,10 @@ fun StudioScreen(
                         viewModel.toggleActionsPopover()
                         viewModel.loadSamplePdfDocument()
                     },
+                    onOpenExcalidrawStudio = {
+                        viewModel.toggleActionsPopover()
+                        viewModel.toggleExcalidrawModal()
+                    },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(top = 54.dp, start = 48.dp)
@@ -413,6 +421,16 @@ fun StudioScreen(
                     onDismiss = { viewModel.closePdfImportDialog() },
                     onLoadSamplePdf = { viewModel.loadSamplePdfDocument() },
                     onConfirmImport = { file, config -> viewModel.commitPdfImport(file, config) }
+                )
+            }
+
+            // Excalidraw Smart Studio & AI Modal
+            if (isExcalidrawModalOpen) {
+                com.example.frameforge.ui.popovers.ExcalidrawStudioModal(
+                    onDismiss = { viewModel.closeExcalidrawModal() },
+                    onStampStrokes = { strokes, desc ->
+                        viewModel.stampStrokesOntoActiveLayer(strokes, desc)
+                    }
                 )
             }
         }

@@ -64,11 +64,13 @@ fun ProcreateTopBar(
     isAnimationAssistVisible: Boolean,
     isDreamsTracksVisible: Boolean,
     isNodeGraphActive: Boolean,
+    isExcalidrawOpen: Boolean = false,
     onGalleryClick: () -> Unit,
     onActionsClick: () -> Unit,
     onAdjustmentsClick: () -> Unit,
     onSelectionClick: () -> Unit,
     onTransformClick: () -> Unit,
+    onExcalidrawClick: () -> Unit = {},
     onToggleAnimationAssist: () -> Unit,
     onToggleDreamsTracks: () -> Unit,
     onToggleNodeGraph: () -> Unit,
@@ -161,6 +163,19 @@ fun ProcreateTopBar(
                         Icons.Default.NearMe,
                         contentDescription = "Transform",
                         tint = if (isTransformActive) ProcreateBlue else Color.LightGray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Excalidraw AI & Diagrams
+                IconButton(
+                    onClick = onExcalidrawClick,
+                    modifier = Modifier.size(34.dp).testTag("excalidraw_tool_button")
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = "Excalidraw AI & Diagrams",
+                        tint = if (isExcalidrawOpen) Color(0xFFA5B4FC) else Color(0xFF818CF8),
                         modifier = Modifier.size(18.dp)
                     )
                 }
