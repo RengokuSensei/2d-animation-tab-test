@@ -65,6 +65,10 @@ fun ProcreateTopBar(
     isDreamsTracksVisible: Boolean,
     isNodeGraphActive: Boolean,
     isExcalidrawOpen: Boolean = false,
+    isAutoAdvanceEnabled: Boolean = false,
+    isVfxOpen: Boolean = false,
+    onToggleAutoAdvance: () -> Unit = {},
+    onOpenVfx: () -> Unit = {},
     onGalleryClick: () -> Unit,
     onActionsClick: () -> Unit,
     onAdjustmentsClick: () -> Unit,
@@ -238,6 +242,44 @@ fun ProcreateTopBar(
                     Text(
                         text = "Node Graph",
                         color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // ⚡ Auto-Cel (Freehand Auto-Advance) Pill
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isAutoAdvanceEnabled) Color(0xFFFFB300) else Color.Transparent)
+                        .clickable { onToggleAutoAdvance() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .testTag("toggle_auto_advance_button")
+                ) {
+                    Text(
+                        text = if (isAutoAdvanceEnabled) "⚡ Auto ON" else "⚡ Auto",
+                        color = if (isAutoAdvanceEnabled) Color.Black else Color.LightGray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // ✨ Cinema VFX Pill
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isVfxOpen) Color(0xFFF59E0B) else Color.Transparent)
+                        .clickable { onOpenVfx() }
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .testTag("toggle_cinema_vfx_button")
+                ) {
+                    Text(
+                        text = "✨ VFX",
+                        color = if (isVfxOpen) Color.Black else Color.LightGray,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )

@@ -90,6 +90,9 @@ fun StudioCanvas(
     adjustmentState: AdjustmentState = AdjustmentState(),
     selectionState: SelectionState = SelectionState(),
     transformState: TransformState = TransformState(),
+    cinematicVfxConfig: com.example.frameforge.cinema.CinematicVfxConfig = com.example.frameforge.cinema.CinematicVfxConfig(),
+    shiftAndTraceState: com.example.frameforge.cinema.ShiftAndTraceState = com.example.frameforge.cinema.ShiftAndTraceState(),
+    autoAdvanceState: com.example.frameforge.cinema.AutoAdvanceState = com.example.frameforge.cinema.AutoAdvanceState(),
     isReferenceCompanionOpen: Boolean = false,
     onStartStroke: (Float, Float, Float) -> Unit,
     onUpdateStroke: (Float, Float, Float) -> Unit,
@@ -100,6 +103,7 @@ fun StudioCanvas(
     onApplyAdjustment: () -> Unit = {},
     onCancelAdjustment: () -> Unit = {},
     onCloseReferenceCompanion: () -> Unit = {},
+    onResetPegs: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var scale by remember { mutableFloatStateOf(1.0f) }
@@ -292,7 +296,8 @@ fun StudioCanvas(
                         totalFrames = project.totalFrames,
                         layers = project.layers,
                         cels = project.cels,
-                        config = onionSkinConfig
+                        config = onionSkinConfig,
+                        shiftAndTrace = shiftAndTraceState
                     )
                 }
 
@@ -354,6 +359,52 @@ fun StudioCanvas(
                         docHeight = project.canvasHeight,
                         state = transformState,
                         scale = scale
+                    )
+                }
+
+                // 9. Draw Cinematic Rim-Light & Cast Shadow
+                if (cinematicVfxConfig.lightGizmo.isEnabled) {
+                    com.example.frameforge.cinema.CinematicShaderPipeline.renderRimLightAndShadow(
+                        canvas = nativeCanvas,
+                        width = project.canvasWidth.toFloat(),
+                        height = project.canvasHeight.toFloat(),
+                        gizmo = cinematicVfxConfig.lightGizmo
+                    )
+                }
+
+                // 10. Draw Volumetric God Rays
+                if (cinematicVfxConfig.volumetricRays) {
+                    com.example.frameforge.cinema.CinematicShaderPipeline.renderVolumetricGodRays(
+                        canvas = nativeCanvas,
+                        width = project.canvasWidth.toFloat(),
+                        height = project.canvasHeight.toFloat(),
+                        lightX = cinematicVfxConfig.lightGizmo.x,
+                        lightY = cinematicVfxConfig.lightGizmo.y,
+                        colorArgb = cinematicVfxConfig.lightGizmo.colorArgb,
+                        intensity = cinematicVfxConfig.lightGizmo.intensity,
+                        rayCount = cinematicVfxConfig.godRayCount
+                    )
+                }
+
+                // 11. Draw Atmospheric Weather & Particles
+                if (cinematicVfxConfig.particles != com.example.frameforge.cinema.AtmosphericParticleType.NONE) {
+                    com.example.frameforge.cinema.CinematicShaderPipeline.renderAtmosphericParticles(
+                        canvas = nativeCanvas,
+                        width = project.canvasWidth.toFloat(),
+                        height = project.canvasHeight.toFloat(),
+                        frameIndex = currentFrame,
+                        type = cinematicVfxConfig.particles,
+                        count = cinematicVfxConfig.particleDensity
+                    )
+                }
+
+                // 12. Draw Cinema Letterbox
+                if (cinematicVfxConfig.letterbox != com.example.frameforge.cinema.CinemaAspectLetterbox.NONE) {
+                    com.example.frameforge.cinema.CinematicShaderPipeline.renderCinemaLetterbox(
+                        canvas = nativeCanvas,
+                        width = project.canvasWidth.toFloat(),
+                        height = project.canvasHeight.toFloat(),
+                        letterbox = cinematicVfxConfig.letterbox
                     )
                 }
 
@@ -468,6 +519,62 @@ fun StudioCanvas(
                         )
                     }
                 }
+            }
+        }
+
+        // --- SHIFT AND TRACE (LIGHT TABLE / OUT-OF-PEGS) GIZMO HUD ---
+        if (shiftAndTraceState.isActive) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 96.dp)
+                    .testTag("shift_trace_hud"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xF218181B)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0A84FF))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Light Table (Out-of-Pegs)",
+                        color = Color(0xFF38BDF8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onResetPegs() }
+                            .background(Color(0xFF0A84FF))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = Color.Transparent
+                    ) {
+                        Text("Reset Pegs", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // --- AUTO-ADVANCE RADIAL COUNTDOWN INDICATOR ---
+        if (autoAdvanceState.isEnabled && autoAdvanceState.countdownProgress > 0f) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(52.dp)
+                    .background(Color(0x99000000), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    progress = { autoAdvanceState.countdownProgress },
+                    modifier = Modifier.size(40.dp),
+                    color = Color(0xFFFFB300),
+                    trackColor = Color(0x33FFFFFF),
+                    strokeWidth = 3.dp
+                )
+                Text("⚡", fontSize = 13.sp)
             }
         }
 

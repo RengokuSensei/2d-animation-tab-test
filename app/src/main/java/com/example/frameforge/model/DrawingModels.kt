@@ -80,7 +80,12 @@ data class AnimationLayer(
     val isAlphaLocked: Boolean = false,
     val opacity: Float = 1.0f,
     val blendMode: BlendModeType = BlendModeType.NORMAL,
-    val onionSkinEnabled: Boolean = true
+    val onionSkinEnabled: Boolean = true,
+    val posZ: Float = 0f,
+    val rotX: Float = 0f,
+    val rotY: Float = 0f,
+    val autoScaleComp: Boolean = true,
+    val onionSkinPinned: Boolean = false
 )
 
 data class DrawingCel(

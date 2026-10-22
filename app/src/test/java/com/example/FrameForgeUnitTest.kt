@@ -344,5 +344,193 @@ class FrameForgeUnitTest {
         val k8sMermaid = com.example.frameforge.ai.TextToDiagramEngine.generateOfflineMermaid("Kubernetes pod container cluster deployment")
         assertTrue(k8sMermaid.contains("Ingress") || k8sMermaid.contains("Pod"))
     }
+
+    // --- MASTER CINEMA SYSTEM TESTS ---
+
+    @Test
+    fun testClipEditorEngineSplit() {
+        val originalClip = com.example.frameforge.cinema.TimelineClip(
+            id = "clip_1",
+            trackId = "track_main",
+            name = "Drawing Cel",
+            startFrame = 0,
+            durationFrames = 20,
+            sourceInFrame = 0,
+            speedMultiplier = 1.0f
+        )
+        val split = com.example.frameforge.cinema.ClipEditorEngine.splitClipAt(originalClip, 8)
+        assertNotNull("Splitting at valid playhead should succeed", split)
+        val (first, second) = split!!
+
+        assertEquals("First clip starts at 0", 0, first.startFrame)
+        assertEquals("First clip duration is 8", 8, first.durationFrames)
+        assertEquals("Second clip starts at playhead 8", 8, second.startFrame)
+        assertEquals("Second clip duration is 12", 12, second.durationFrames)
+        assertEquals("Second clip source in offset is 8", 8, second.sourceInFrame)
+    }
+
+    @Test
+    fun testClipEditorEngineRippleTrim() {
+        val clipA = com.example.frameforge.cinema.TimelineClip(
+            id = "clip_a",
+            trackId = "track_1",
+            name = "Clip A",
+            startFrame = 0,
+            durationFrames = 10
+        )
+        val clipB = com.example.frameforge.cinema.TimelineClip(
+            id = "clip_b",
+            trackId = "track_1",
+            name = "Clip B",
+            startFrame = 10,
+            durationFrames = 15
+        )
+
+        // Trim Out-point of Clip A from 10 to 6 with Ripple ON
+        val trimResult = com.example.frameforge.cinema.ClipEditorEngine.trimOutPoint(
+            clip = clipA,
+            newEndFrame = 6,
+            isRipple = true,
+            subsequentClips = listOf(clipB)
+        )
+
+        assertEquals("Trimmed duration is 6", 6, trimResult.trimmedClip.durationFrames)
+        assertEquals("Subsequent clip shifted forward by 4 frames", 1, trimResult.shiftedClips.size)
+        assertEquals("Clip B shifted start is 6", 6, trimResult.shiftedClips[0].startFrame)
+    }
+
+    @Test
+    fun testClipEditorEngineTimeStretch() {
+        val clip = com.example.frameforge.cinema.TimelineClip(
+            id = "stretch_clip",
+            trackId = "track_1",
+            name = "Stretch Test",
+            startFrame = 0,
+            durationFrames = 10,
+            sourceDuration = 10,
+            speedMultiplier = 1.0f
+        )
+
+        // 200% Fast-forward (target duration = 5 frames -> speed 2.0x)
+        val fastResult = com.example.frameforge.cinema.ClipEditorEngine.timeStretchClip(clip, 5)
+        assertEquals(5, fastResult.durationFrames)
+        assertEquals(2.0f, fastResult.speedMultiplier, 0.001f)
+
+        // 50% Slow-Mo (target duration = 20 frames -> speed 0.5x)
+        val slowResult = com.example.frameforge.cinema.ClipEditorEngine.timeStretchClip(clip, 20)
+        assertEquals(20, slowResult.durationFrames)
+        assertEquals(0.5f, slowResult.speedMultiplier, 0.001f)
+    }
+
+    @Test
+    fun testCubicBezierNewtonRaphsonAndVelocity() {
+        val curve = com.example.frameforge.cinema.BezierPresets.CINEMA_SNAP
+
+        // At x = 0, y should be 0; at x = 1, y should be 1
+        val y0 = curve.evaluate(0f)
+        val y1 = curve.evaluate(1f)
+        assertEquals(0f, y0, 0.01f)
+        assertEquals(1f, y1, 0.01f)
+
+        // Monotonic velocity derivative check
+        val velMid = curve.evaluateVelocity(0.5f)
+        assertFalse("Velocity should not be NaN", velMid.isNaN())
+        assertTrue("Velocity should be positive in forward curve", velMid >= 0f)
+
+        // Elastic overshoot should exceed 1.0 at peak
+        val elastic = com.example.frameforge.cinema.BezierPresets.ELASTIC_OVERSHOOT
+        var maxVal = 0f
+        for (i in 0..100) {
+            val v = elastic.evaluate(i / 100f)
+            if (v > maxVal) maxVal = v
+        }
+        assertTrue("Elastic overshoot should exceed 1.0", maxVal > 1.0f)
+    }
+
+    @Test
+    fun testMultiplaneVirtualCamera3DPerspectiveAndDoF() {
+        val camera = com.example.frameforge.cinema.VirtualCamera3D(
+            focalLengthMm = 50f,
+            focusDistanceZ = 0f,
+            aperture = 2.8f,
+            dofEnabled = true
+        )
+
+        // Foreground layer (Z < 0) should be magnified (scale > 1.0)
+        val fgScale = camera.computePerspectiveScale(layerZ = -500f, autoScaleComp = false)
+        assertTrue("Foreground layer should have perspective scale > 1.0", fgScale > 1.0f)
+
+        // Background layer (Z > 0) should be demagnified (scale < 1.0)
+        val bgScale = camera.computePerspectiveScale(layerZ = 1000f, autoScaleComp = false)
+        assertTrue("Background layer should have perspective scale < 1.0", bgScale < 1.0f)
+
+        // Focal plane (Z = 0) has 0 blur; deep layer (Z = 2000) has substantial blur
+        val focusBlur = camera.computeDoFBlurRadius(0f)
+        val deepBlur = camera.computeDoFBlurRadius(2000f)
+        assertEquals("Focal plane has 0 blur radius", 0f, focusBlur, 0.01f)
+        assertTrue("Out-of-focus plane has bokeh blur radius", deepBlur > 10f)
+
+        // 2D Projection point
+        val (px, py) = camera.projectPoint(x = 960f, y = 540f, z = 0f, canvasWidth = 1920f, canvasHeight = 1080f)
+        assertEquals("Center point projects to center on focal plane", 960f, px, 0.1f)
+        assertEquals("Center point projects to center on focal plane", 540f, py, 0.1f)
+    }
+
+    @Test
+    fun testPsychovisualTransitionGeneration() {
+        val bmp = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888)
+        val impactBitmap = com.example.frameforge.cinema.PsychovisualTransitionEngine.generateImpactFrame(
+            source = bmp,
+            threshold = 0.5f,
+            invert = true,
+            addSpeedLines = true
+        )
+        assertNotNull("Impact frame generates bitmap", impactBitmap)
+
+        val strokeA = com.example.frameforge.model.DrawingStroke(
+            points = listOf(com.example.frameforge.model.StrokePoint(100f, 100f), com.example.frameforge.model.StrokePoint(150f, 150f)),
+            colorArgb = 0xFF000000.toInt(),
+            toolType = com.example.frameforge.model.ToolType.PEN,
+            size = 10f
+        )
+        val strokeB = com.example.frameforge.model.DrawingStroke(
+            points = listOf(com.example.frameforge.model.StrokePoint(200f, 200f), com.example.frameforge.model.StrokePoint(250f, 250f)),
+            colorArgb = 0xFF000000.toInt(),
+            toolType = com.example.frameforge.model.ToolType.PEN,
+            size = 10f
+        )
+        val smearEchoes = com.example.frameforge.cinema.PsychovisualTransitionEngine.generateSmearStrokes(
+            strokeA = strokeA,
+            strokeB = strokeB,
+            smearProgress = 0.5f,
+            chromaEchoes = true
+        )
+        assertTrue("Smear echoes generate trailing passes", smearEchoes.isNotEmpty())
+    }
+
+    @Test
+    fun testAtmosphericParticlesAndLetterbox() {
+        val letterbox239 = com.example.frameforge.cinema.CinemaAspectLetterbox.CINEMASCOPE_239
+        assertNotNull(letterbox239.ratio)
+        assertEquals(2.39f, letterbox239.ratio!!, 0.01f)
+
+        val lightGizmo = com.example.frameforge.cinema.LightSourceGizmo(x = 0.8f, y = 0.2f)
+        assertTrue("Light gizmo is enabled by default", lightGizmo.isEnabled)
+    }
+
+    @Test
+    fun testShiftAndTraceState() {
+        val state = com.example.frameforge.cinema.ShiftAndTraceState(
+            isActive = true,
+            offsetX = 40f,
+            offsetY = -20f,
+            rotationDeg = 15f,
+            scale = 1.2f
+        )
+        assertTrue("Modified light table pegs should return isModified = true", state.isModified())
+
+        val canonical = com.example.frameforge.cinema.ShiftAndTraceState()
+        assertFalse("Default state is not modified", canonical.isModified())
+    }
 }
 

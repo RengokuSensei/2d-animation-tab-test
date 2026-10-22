@@ -346,6 +346,9 @@ object DrawingEngine {
     /**
      * Generates Onion Skin overlay for previous and future frames
      */
+    /**
+     * Generates Onion Skin overlay for previous and future frames
+     */
     fun renderOnionSkins(
         canvas: Canvas,
         width: Int,
@@ -354,11 +357,14 @@ object DrawingEngine {
         totalFrames: Int,
         layers: List<AnimationLayer>,
         cels: List<DrawingCel>,
-        config: OnionSkinConfig
+        config: OnionSkinConfig,
+        shiftAndTrace: com.example.frameforge.cinema.ShiftAndTraceState? = null
     ) {
         if (!config.enabled) return
 
-        val activeLayers = layers.filter { it.isVisible && it.onionSkinEnabled }
+        // Per-layer Onion Skin Pinning: if any layers are pinned, only show pinned layers
+        val pinnedLayers = layers.filter { it.isVisible && it.onionSkinPinned }
+        val activeLayers = if (pinnedLayers.isNotEmpty()) pinnedLayers else layers.filter { it.isVisible && it.onionSkinEnabled }
         if (activeLayers.isEmpty()) return
 
         // Previous frames (tinted coral red)
@@ -368,7 +374,7 @@ object DrawingEngine {
             val distRatio = (config.prevFramesCount - offset + 1).toFloat() / config.prevFramesCount
             val alpha = (config.opacity * distRatio * 255).toInt().coerceIn(10, 255)
 
-            drawGhostFrame(canvas, width, height, prevIdx, activeLayers, cels, config.prevTintArgb, alpha)
+            drawGhostFrame(canvas, width, height, prevIdx, activeLayers, cels, config.prevTintArgb, alpha, currentFrame, shiftAndTrace)
         }
 
         // Future frames (tinted green)
@@ -378,7 +384,7 @@ object DrawingEngine {
             val distRatio = (config.nextFramesCount - offset + 1).toFloat() / config.nextFramesCount
             val alpha = (config.opacity * distRatio * 255).toInt().coerceIn(10, 255)
 
-            drawGhostFrame(canvas, width, height, nextIdx, activeLayers, cels, config.nextTintArgb, alpha)
+            drawGhostFrame(canvas, width, height, nextIdx, activeLayers, cels, config.nextTintArgb, alpha, currentFrame, shiftAndTrace)
         }
     }
 
@@ -390,7 +396,9 @@ object DrawingEngine {
         layers: List<AnimationLayer>,
         cels: List<DrawingCel>,
         tintColorArgb: Int,
-        alpha: Int
+        alpha: Int,
+        currentFrame: Int = 0,
+        shiftAndTrace: com.example.frameforge.cinema.ShiftAndTraceState? = null
     ) {
         val frameCels = cels.filter { it.frameIndex == frameIndex }
         if (frameCels.isEmpty()) return
@@ -404,6 +412,18 @@ object DrawingEngine {
             style = Paint.Style.STROKE
         }
 
+        // Shift and Trace (Light Table / Out-of-Pegs) transformation
+        val shouldShift = shiftAndTrace != null && shiftAndTrace.isActive && (frameIndex == currentFrame + shiftAndTrace.targetFrameOffset)
+        if (shouldShift) {
+            canvas.save()
+            val cx = width / 2f
+            val cy = height / 2f
+            canvas.translate(cx + shiftAndTrace.offsetX, cy + shiftAndTrace.offsetY)
+            canvas.rotate(shiftAndTrace.rotationDeg)
+            canvas.scale(shiftAndTrace.scale, shiftAndTrace.scale)
+            canvas.translate(-cx, -cy)
+        }
+
         for (layer in layers) {
             val cel = frameCels.find { it.layerId == layer.id } ?: continue
             for (stroke in cel.strokes) {
@@ -412,6 +432,10 @@ object DrawingEngine {
                 val path = buildSmoothPath(stroke.points)
                 canvas.drawPath(path, ghostPaint)
             }
+        }
+
+        if (shouldShift) {
+            canvas.restore()
         }
     }
 

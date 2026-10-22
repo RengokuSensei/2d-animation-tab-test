@@ -70,6 +70,7 @@ fun LayersPopover(
     onToggleLock: (String) -> Unit,
     onSetOpacity: (String, Float) -> Unit,
     onSetBlendMode: (String, BlendModeType) -> Unit,
+    onToggleOnionSkinPin: (String) -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -132,6 +133,7 @@ fun LayersPopover(
                         onToggleLock = { onToggleLock(layer.id) },
                         onSetOpacity = { onSetOpacity(layer.id, it) },
                         onSetBlendMode = { onSetBlendMode(layer.id, it) },
+                        onToggleOnionPin = { onToggleOnionSkinPin(layer.id) },
                         onDuplicate = { onDuplicateLayer(layer.id) },
                         onMergeDown = { onMergeLayerDown(layer.id) },
                         onDelete = { onDeleteLayer(layer.id) }
@@ -151,6 +153,7 @@ private fun LayerItemCard(
     onToggleLock: () -> Unit,
     onSetOpacity: (Float) -> Unit,
     onSetBlendMode: (BlendModeType) -> Unit,
+    onToggleOnionPin: () -> Unit = {},
     onDuplicate: () -> Unit,
     onMergeDown: () -> Unit,
     onDelete: () -> Unit
@@ -198,12 +201,23 @@ private fun LayerItemCard(
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Column {
-                        Text(
-                            text = layer.name,
-                            color = if (isSelected) ProcreateBlue else Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = layer.name,
+                                color = if (isSelected) ProcreateBlue else Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (layer.posZ != 0f) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "3D",
+                                    color = Color(0xFF34D399),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         Text(
                             text = "${(layer.opacity * 100).toInt()}% • ${layer.blendMode.label}",
                             color = Color.Gray,
@@ -213,6 +227,24 @@ private fun LayerItemCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Onion Skin Pin icon (🧅)
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (layer.onionSkinPinned) Color(0x33FF5252) else Color.Transparent)
+                            .clickable { onToggleOnionPin() }
+                            .padding(2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🧅",
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
                     // Lock icon
                     IconButton(onClick = onToggleLock, modifier = Modifier.size(26.dp)) {
                         Icon(

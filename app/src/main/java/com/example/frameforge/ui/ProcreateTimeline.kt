@@ -84,6 +84,17 @@ fun ProcreateTimeline(
     onSetRotoscopingOpacity: (Float) -> Unit,
     onToggleAudioTrack: () -> Unit,
     onSetAudioVolume: (Float) -> Unit,
+    onSplitClip: () -> Unit = {},
+    isRippleEdit: Boolean = false,
+    onToggleRippleEdit: () -> Unit = {},
+    isSnappingActive: Boolean = true,
+    onToggleSnapping: () -> Unit = {},
+    onOpenVelocityGraph: () -> Unit = {},
+    onOpenTransitions: () -> Unit = {},
+    onOpenMultiplane: () -> Unit = {},
+    timelineClips: List<com.example.frameforge.cinema.TimelineClip> = emptyList(),
+    selectedClipId: String? = null,
+    onSelectClip: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val reelScrollState = rememberScrollState()
@@ -167,6 +178,90 @@ fun ProcreateTimeline(
 
                 // Onion Skin & Action Tools
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // NLE Razor Split
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onSplitClip() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("split_clip_button")
+                    ) {
+                        Text("✂️ Split", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Ripple Edit Mode Toggle
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isRippleEdit) Color(0xFF8B5CF6) else Color(0x33FFFFFF))
+                            .clickable { onToggleRippleEdit() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("ripple_edit_button")
+                    ) {
+                        Text(if (isRippleEdit) "Ripple ON" else "Ripple", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Magnetic Snapping Toggle
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSnappingActive) Color(0xFFFFD700) else Color(0x33FFFFFF))
+                            .clickable { onToggleSnapping() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("snap_toggle_button")
+                    ) {
+                        Text("🧲", color = if (isSnappingActive) Color.Black else Color.LightGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Velocity & Bezier Graph Editor
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenVelocityGraph() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("open_velocity_graph_button")
+                    ) {
+                        Text("📈 Curve", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Psychovisual Scene Transitions
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenTransitions() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("open_transitions_button")
+                    ) {
+                        Text("🔀 FX", color = Color(0xFFA78BFA), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // 2.5D / 3D Multiplane Space
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenMultiplane() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("open_multiplane_button")
+                    ) {
+                        Text("🌐 3D", color = Color(0xFF34D399), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
                     // Onion Skin Toggle Pill
                     Box(
                         modifier = Modifier

@@ -36,6 +36,10 @@ import com.example.frameforge.ui.popovers.GalleryDialog
 import com.example.frameforge.ui.popovers.LayersPopover
 import com.example.frameforge.ui.popovers.SelectionDock
 import com.example.frameforge.ui.popovers.TransformDock
+import com.example.frameforge.ui.popovers.CinematicVfxDialog
+import com.example.frameforge.ui.popovers.VelocityGraphDialog
+import com.example.frameforge.ui.popovers.MultiplaneStageDialog
+import com.example.frameforge.ui.popovers.SceneTransitionsDialog
 import com.example.frameforge.viewmodel.StudioViewModel
 
 @Composable
@@ -88,6 +92,20 @@ fun StudioScreen(
     val pdfFile by viewModel.pdfFile.collectAsState()
     val pdfDocumentTitle by viewModel.pdfDocumentTitle.collectAsState()
     val isExcalidrawModalOpen by viewModel.isExcalidrawModalOpen.collectAsState()
+    val isCinematicVfxDialogOpen by viewModel.isCinematicVfxDialogOpen.collectAsState()
+    val cinematicVfxConfig by viewModel.cinematicVfxConfig.collectAsState()
+    val isVelocityGraphDialogOpen by viewModel.isVelocityGraphDialogOpen.collectAsState()
+    val velocityCurveState by viewModel.velocityCurveState.collectAsState()
+    val isMultiplaneStageDialogOpen by viewModel.isMultiplaneStageDialogOpen.collectAsState()
+    val multiplaneStageState by viewModel.multiplaneStageState.collectAsState()
+    val isSceneTransitionsDialogOpen by viewModel.isSceneTransitionsDialogOpen.collectAsState()
+    val psychovisualTransitionConfig by viewModel.psychovisualTransitionConfig.collectAsState()
+    val shiftAndTraceState by viewModel.shiftAndTraceState.collectAsState()
+    val timelineClips by viewModel.timelineClips.collectAsState()
+    val selectedClipId by viewModel.selectedClipId.collectAsState()
+    val isRippleEditActive by viewModel.isRippleEditActive.collectAsState()
+    val isMagneticSnappingActive by viewModel.isMagneticSnappingActive.collectAsState()
+    val autoAdvanceState by viewModel.autoAdvanceState.collectAsState()
 
     val pdfPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -99,10 +117,16 @@ fun StudioScreen(
 
     val hasModalOpen = isGalleryDialogOpen || isActionsPopoverOpen || isAdjustmentsPopoverOpen ||
         isBrushStudioOpen || isLayersPopoverOpen || isColorPickerOpen ||
-        transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen || isExcalidrawModalOpen
+        transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen ||
+        isExcalidrawModalOpen || isCinematicVfxDialogOpen || isVelocityGraphDialogOpen ||
+        isMultiplaneStageDialogOpen || isSceneTransitionsDialogOpen
 
     BackHandler(enabled = hasModalOpen) {
         when {
+            isCinematicVfxDialogOpen -> viewModel.closeCinematicVfxDialog()
+            isVelocityGraphDialogOpen -> viewModel.closeVelocityGraphDialog()
+            isMultiplaneStageDialogOpen -> viewModel.closeMultiplaneStageDialog()
+            isSceneTransitionsDialogOpen -> viewModel.closeSceneTransitionsDialog()
             isExcalidrawModalOpen -> viewModel.closeExcalidrawModal()
             isPdfImportDialogOpen -> viewModel.closePdfImportDialog()
             isGalleryDialogOpen -> viewModel.toggleGalleryDialog()
@@ -152,6 +176,9 @@ fun StudioScreen(
                     adjustmentState = adjustmentState,
                     selectionState = selectionState,
                     transformState = transformState,
+                    cinematicVfxConfig = cinematicVfxConfig,
+                    shiftAndTraceState = shiftAndTraceState,
+                    autoAdvanceState = autoAdvanceState,
                     isReferenceCompanionOpen = isReferenceCompanionOpen,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
                     onUpdateStroke = { x, y, p -> viewModel.updateStroke(x, y, p) },
@@ -162,6 +189,7 @@ fun StudioScreen(
                     onApplyAdjustment = { viewModel.applyAdjustment() },
                     onCancelAdjustment = { viewModel.cancelAdjustment() },
                     onCloseReferenceCompanion = { viewModel.toggleReferenceCompanion() },
+                    onResetPegs = { viewModel.resetShiftAndTracePegs() },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -182,6 +210,10 @@ fun StudioScreen(
                 isDreamsTracksVisible = isDreamsMultiTrackVisible,
                 isNodeGraphActive = isNodeGraphViewActive,
                 isExcalidrawOpen = isExcalidrawModalOpen,
+                isAutoAdvanceEnabled = autoAdvanceState.isEnabled,
+                isVfxOpen = isCinematicVfxDialogOpen,
+                onToggleAutoAdvance = { viewModel.toggleAutoAdvanceActive() },
+                onOpenVfx = { viewModel.toggleCinematicVfxDialog() },
                 onGalleryClick = { viewModel.toggleGalleryDialog() },
                 onActionsClick = { viewModel.toggleActionsPopover() },
                 onAdjustmentsClick = { viewModel.toggleAdjustmentsPopover() },
@@ -274,6 +306,17 @@ fun StudioScreen(
                     onSetRotoscopingOpacity = { viewModel.setRotoscopingOpacity(it) },
                     onToggleAudioTrack = { viewModel.toggleAudioTrack() },
                     onSetAudioVolume = { viewModel.setAudioVolume(it) },
+                    onSplitClip = { viewModel.splitClipAtPlayhead() },
+                    isRippleEdit = isRippleEditActive,
+                    onToggleRippleEdit = { viewModel.toggleRippleEdit() },
+                    isSnappingActive = isMagneticSnappingActive,
+                    onToggleSnapping = { viewModel.toggleMagneticSnapping() },
+                    onOpenVelocityGraph = { viewModel.toggleVelocityGraphDialog() },
+                    onOpenTransitions = { viewModel.toggleSceneTransitionsDialog() },
+                    onOpenMultiplane = { viewModel.toggleMultiplaneStageDialog() },
+                    timelineClips = timelineClips,
+                    selectedClipId = selectedClipId,
+                    onSelectClip = { viewModel.selectClip(it) },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }
@@ -379,6 +422,7 @@ fun StudioScreen(
                     onToggleLock = { viewModel.toggleLayerLock(it) },
                     onSetOpacity = { id, op -> viewModel.setLayerOpacity(id, op) },
                     onSetBlendMode = { id, bm -> viewModel.setLayerBlendMode(id, bm) },
+                    onToggleOnionSkinPin = { viewModel.toggleLayerOnionSkinPin(it) },
                     onClose = { viewModel.toggleLayersPopover() },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -431,6 +475,52 @@ fun StudioScreen(
                     onStampStrokes = { strokes, desc ->
                         viewModel.stampStrokesOntoActiveLayer(strokes, desc)
                     }
+                )
+            }
+
+            // 1. Cinematic VFX & Shaders Dialog
+            if (isCinematicVfxDialogOpen) {
+                CinematicVfxDialog(
+                    config = cinematicVfxConfig,
+                    onUpdateConfig = { viewModel.updateCinematicVfxConfig(it) },
+                    onClose = { viewModel.closeCinematicVfxDialog() },
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+
+            // 2. Velocity & Cubic Bezier Curve Graph Dialog
+            if (isVelocityGraphDialogOpen) {
+                VelocityGraphDialog(
+                    state = velocityCurveState,
+                    onUpdateCurve = { viewModel.updateVelocityCurve(it) },
+                    onUpdateMode = { mode -> viewModel.applyVelocityCurvePreset(velocityCurveState.curve, mode.label) },
+                    onToggleStepMotion = { step -> viewModel.applyVelocityCurvePreset(if (step) com.example.frameforge.cinema.BezierPresets.STEPPED_STOP_MOTION else com.example.frameforge.cinema.BezierPresets.CINEMA_SNAP, "Step Motion") },
+                    onClose = { viewModel.closeVelocityGraphDialog() },
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+
+            // 3. 2.5D / 3D Multiplane Stage Dialog
+            if (isMultiplaneStageDialogOpen) {
+                MultiplaneStageDialog(
+                    state = multiplaneStageState,
+                    onUpdateCamera = { viewModel.updateMultiplaneCamera(it) },
+                    onUpdateLayer = { plane -> viewModel.updateLayer3DDepth(plane.layerId, plane.posZ, plane.autoScaleCompensation) },
+                    onToggleOrbit = { viewModel.toggleMultiplaneStageDialog() },
+                    onSelectLayer = { viewModel.setActiveLayer(it) },
+                    onClose = { viewModel.closeMultiplaneStageDialog() },
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+
+            // 4. Psychovisual Scene Transitions Dialog
+            if (isSceneTransitionsDialogOpen) {
+                SceneTransitionsDialog(
+                    config = psychovisualTransitionConfig,
+                    onUpdateConfig = { viewModel.applyPsychovisualTransition(it) },
+                    onApplyTransition = { viewModel.applyPsychovisualTransition(psychovisualTransitionConfig); viewModel.closeSceneTransitionsDialog() },
+                    onClose = { viewModel.closeSceneTransitionsDialog() },
+                    modifier = Modifier.align(Alignment.Center)
                 )
             }
         }

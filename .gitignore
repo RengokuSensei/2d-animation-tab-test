@@ -24,6 +24,8 @@ app/build/
 
 # Local configuration file
 local.properties
+.env
+.aistudio/
 
 # Log Files
 *.log

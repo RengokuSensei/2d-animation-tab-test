@@ -64,6 +64,25 @@ import com.example.frameforge.model.SelectionMode
 import com.example.frameforge.model.SelectionState
 import com.example.frameforge.model.TransformMode
 import com.example.frameforge.model.TransformState
+import com.example.frameforge.cinema.AutoAdvanceFlipbookController
+import com.example.frameforge.cinema.AutoAdvanceMode
+import com.example.frameforge.cinema.AutoAdvanceState
+import com.example.frameforge.cinema.CinematicShaderPipeline
+import com.example.frameforge.cinema.CinematicVfxConfig
+import com.example.frameforge.cinema.ClipEditMode
+import com.example.frameforge.cinema.ClipEditorEngine
+import com.example.frameforge.cinema.MultiplaneLayer3D
+import com.example.frameforge.cinema.MultiplaneStageState
+import com.example.frameforge.cinema.PsychovisualTransitionConfig
+import com.example.frameforge.cinema.PsychovisualTransitionType
+import com.example.frameforge.cinema.ShiftAndTraceState
+import com.example.frameforge.cinema.SnapGuide
+import com.example.frameforge.cinema.TimelineClip
+import com.example.frameforge.cinema.TimelineClipType
+import com.example.frameforge.cinema.VelocityCurveState
+import com.example.frameforge.cinema.VirtualCamera3D
+import com.example.frameforge.cinema.CubicBezierCurve
+import androidx.compose.ui.geometry.Offset
 
 enum class SidePanelType {
 
@@ -226,6 +245,58 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _isExcalidrawModalOpen = MutableStateFlow(false)
     val isExcalidrawModalOpen: StateFlow<Boolean> = _isExcalidrawModalOpen.asStateFlow()
 
+    // --- CINEMA SYSTEMS STATE ---
+    private val _isCinematicVfxDialogOpen = MutableStateFlow(false)
+    val isCinematicVfxDialogOpen: StateFlow<Boolean> = _isCinematicVfxDialogOpen.asStateFlow()
+
+    private val _cinematicVfxConfig = MutableStateFlow(CinematicVfxConfig())
+    val cinematicVfxConfig: StateFlow<CinematicVfxConfig> = _cinematicVfxConfig.asStateFlow()
+
+    private val _isVelocityGraphDialogOpen = MutableStateFlow(false)
+    val isVelocityGraphDialogOpen: StateFlow<Boolean> = _isVelocityGraphDialogOpen.asStateFlow()
+
+    private val _velocityCurveState = MutableStateFlow(VelocityCurveState())
+    val velocityCurveState: StateFlow<VelocityCurveState> = _velocityCurveState.asStateFlow()
+
+    private val _isMultiplaneStageDialogOpen = MutableStateFlow(false)
+    val isMultiplaneStageDialogOpen: StateFlow<Boolean> = _isMultiplaneStageDialogOpen.asStateFlow()
+
+    private val _multiplaneStageState = MutableStateFlow(MultiplaneStageState())
+    val multiplaneStageState: StateFlow<MultiplaneStageState> = _multiplaneStageState.asStateFlow()
+
+    private val _isSceneTransitionsDialogOpen = MutableStateFlow(false)
+    val isSceneTransitionsDialogOpen: StateFlow<Boolean> = _isSceneTransitionsDialogOpen.asStateFlow()
+
+    private val _psychovisualTransitionConfig = MutableStateFlow(PsychovisualTransitionConfig())
+    val psychovisualTransitionConfig: StateFlow<PsychovisualTransitionConfig> = _psychovisualTransitionConfig.asStateFlow()
+
+    private val _shiftAndTraceState = MutableStateFlow(ShiftAndTraceState())
+    val shiftAndTraceState: StateFlow<ShiftAndTraceState> = _shiftAndTraceState.asStateFlow()
+
+    private val _timelineClips = MutableStateFlow<List<TimelineClip>>(createInitialTimelineClips())
+    val timelineClips: StateFlow<List<TimelineClip>> = _timelineClips.asStateFlow()
+
+    private val _selectedClipId = MutableStateFlow<String?>("clip_main_sketch")
+    val selectedClipId: StateFlow<String?> = _selectedClipId.asStateFlow()
+
+    private val _isRippleEditActive = MutableStateFlow(false)
+    val isRippleEditActive: StateFlow<Boolean> = _isRippleEditActive.asStateFlow()
+
+    private val _isMagneticSnappingActive = MutableStateFlow(true)
+    val isMagneticSnappingActive: StateFlow<Boolean> = _isMagneticSnappingActive.asStateFlow()
+
+    private val _activeGuides = MutableStateFlow<List<SnapGuide>>(emptyList())
+    val activeGuides: StateFlow<List<SnapGuide>> = _activeGuides.asStateFlow()
+
+    private val _isTimeStretchActive = MutableStateFlow(false)
+    val isTimeStretchActive: StateFlow<Boolean> = _isTimeStretchActive.asStateFlow()
+
+    val autoAdvanceController = AutoAdvanceFlipbookController(viewModelScope) { shiftX, shiftY ->
+        advanceFrameForAutoAdvance(shiftX, shiftY)
+    }
+    val autoAdvanceState: StateFlow<AutoAdvanceState> = autoAdvanceController.state
+
+
 
     // Undo / Redo history
     private val undoStack = Stack<AnimationProject>()
@@ -324,6 +395,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Drawing Stroke Handling ---
     fun startStroke(x: Float, y: Float, pressure: Float) {
+        autoAdvanceController.onStrokeStarted()
         val stroke = DrawingStroke(
             points = listOf(StrokePoint(x, y, pressure)),
             colorArgb = _brushColor.value.toArgb(),
@@ -372,6 +444,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             }
             p.copy(cels = newCels, updatedAt = System.currentTimeMillis())
         }
+
+        autoAdvanceController.onStrokeCompleted(finalStroke)
     }
 
     // --- Frame & Playback ---
@@ -1482,5 +1556,298 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
         showStatus(description)
     }
+
+    // --- AUTO-ADVANCE FRAME ENGINE ---
+    fun advanceFrameForAutoAdvance(shiftX: Float = 0f, shiftY: Float = 0f) {
+        val curr = _currentFrame.value
+        val total = _project.value.totalFrames
+        if (curr >= total - 1) {
+            addFrame()
+        } else {
+            _currentFrame.value = curr + 1
+        }
+
+        if (shiftX != 0f || shiftY != 0f) {
+            val prevFrame = curr
+            val nextFrame = _currentFrame.value
+            val layerId = _activeLayerId.value
+            _project.update { p ->
+                val prevCel = p.cels.find { it.frameIndex == prevFrame && it.layerId == layerId }
+                if (prevCel != null && prevCel.strokes.isNotEmpty()) {
+                    val shiftedStrokes = prevCel.strokes.map { st ->
+                        st.copy(
+                            id = java.util.UUID.randomUUID().toString(),
+                            points = st.points.map { pt -> pt.copy(x = pt.x + shiftX, y = pt.y + shiftY) }
+                        )
+                    }
+                    val newCels = p.cels.toMutableList()
+                    val targetCel = newCels.find { it.frameIndex == nextFrame && it.layerId == layerId }
+                    if (targetCel != null) {
+                        val idx = newCels.indexOf(targetCel)
+                        newCels[idx] = targetCel.copy(strokes = targetCel.strokes + shiftedStrokes)
+                    } else {
+                        newCels.add(DrawingCel(frameIndex = nextFrame, layerId = layerId, strokes = shiftedStrokes))
+                    }
+                    p.copy(cels = newCels)
+                } else {
+                    p
+                }
+            }
+        }
+        showStatus("⚡ Auto-Advanced to Frame ${_currentFrame.value + 1}")
+    }
+
+    fun toggleAutoAdvanceActive() {
+        autoAdvanceController.toggleAutoAdvance()
+        val enabled = autoAdvanceState.value.isEnabled
+        showStatus(if (enabled) "⚡ Auto-Advance Enabled" else "Auto-Advance Paused")
+    }
+
+    fun setAutoAdvanceMode(mode: AutoAdvanceMode) {
+        autoAdvanceController.setMode(mode)
+        showStatus("Auto-Advance: ${mode.label}")
+    }
+
+    fun setAutoAdvanceDebounce(ms: Long) {
+        autoAdvanceController.setDebounceThreshold(ms)
+        showStatus("Pause Threshold: ${ms}ms")
+    }
+
+    // --- INITIAL TIMELINE CLIPS ---
+    private fun createInitialTimelineClips(): List<TimelineClip> {
+        return listOf(
+            TimelineClip(
+                id = "clip_main_sketch",
+                trackId = "layer_sketch",
+                name = "Drawing Cel Sequence",
+                startFrame = 0,
+                durationFrames = 16,
+                clipType = TimelineClipType.DRAWING_CEL,
+                colorArgb = 0xFF0A84FF.toInt()
+            ),
+            TimelineClip(
+                id = "clip_video_ref",
+                trackId = "track_video",
+                name = "Video Rotoscoping Track",
+                startFrame = 0,
+                durationFrames = 16,
+                clipType = TimelineClipType.VIDEO,
+                colorArgb = 0xFF9333EA.toInt()
+            ),
+            TimelineClip(
+                id = "clip_audio_foley",
+                trackId = "track_audio",
+                name = "Cinematic Beat & Foley",
+                startFrame = 0,
+                durationFrames = 16,
+                clipType = TimelineClipType.AUDIO,
+                colorArgb = 0xFF10B981.toInt()
+            )
+        )
+    }
+
+    // --- PRECISION NLE CLIP EDITING ---
+    fun splitClipAtPlayhead() {
+        val playhead = _currentFrame.value
+        val currentClips = _timelineClips.value
+        val clipToSplit = currentClips.find { playhead > it.startFrame && playhead < it.endFrame }
+
+        if (clipToSplit != null) {
+            val splitResult = ClipEditorEngine.splitClipAt(clipToSplit, playhead)
+            if (splitResult != null) {
+                val newClips = currentClips.toMutableList()
+                val idx = newClips.indexOf(clipToSplit)
+                newClips.removeAt(idx)
+                newClips.add(idx, splitResult.second)
+                newClips.add(idx, splitResult.first)
+                _timelineClips.value = newClips
+                _selectedClipId.value = splitResult.first.id
+                showStatus("✂️ Split Clip at Frame ${playhead + 1}")
+            }
+        } else {
+            showStatus("No clip under playhead to split")
+        }
+    }
+
+    fun selectClip(id: String?) {
+        _selectedClipId.value = id
+    }
+
+    fun toggleRippleEdit() {
+        _isRippleEditActive.update { !it }
+        showStatus(if (_isRippleEditActive.value) "Ripple Edit ON" else "Ripple Edit OFF")
+    }
+
+    fun toggleMagneticSnapping() {
+        _isMagneticSnappingActive.update { !it }
+        showStatus(if (_isMagneticSnappingActive.value) "🧲 Magnetic Snapping ON" else "Snapping OFF")
+    }
+
+    fun toggleTimeStretch() {
+        _isTimeStretchActive.update { !it }
+        showStatus(if (_isTimeStretchActive.value) "Time-Stretch ON (25%-400%)" else "Time-Stretch OFF")
+    }
+
+    fun trimClipIn(clipId: String, newStart: Int) {
+        val clips = _timelineClips.value
+        val clip = clips.find { it.id == clipId } ?: return
+        val subsequent = clips.filter { it.trackId == clip.trackId && it.startFrame > clip.startFrame }
+        val res = ClipEditorEngine.trimInPoint(clip, newStart, _isRippleEditActive.value, subsequent)
+
+        val updated = clips.map { c ->
+            when (c.id) {
+                clip.id -> res.trimmedClip
+                in res.shiftedClips.map { it.id } -> res.shiftedClips.find { it.id == c.id } ?: c
+                else -> c
+            }
+        }
+        _timelineClips.value = updated
+        showStatus("Trimmed In: ${res.trimmedClip.startFrame}f (${res.deltaFrames}f)")
+    }
+
+    fun trimClipOut(clipId: String, newDuration: Int) {
+        val clips = _timelineClips.value
+        val clip = clips.find { it.id == clipId } ?: return
+        val subsequent = clips.filter { it.trackId == clip.trackId && it.startFrame > clip.startFrame }
+        val res = ClipEditorEngine.trimOutPoint(clip, newDuration, _isRippleEditActive.value, subsequent)
+
+        val updated = clips.map { c ->
+            when (c.id) {
+                clip.id -> res.trimmedClip
+                in res.shiftedClips.map { it.id } -> res.shiftedClips.find { it.id == c.id } ?: c
+                else -> c
+            }
+        }
+        _timelineClips.value = updated
+        showStatus("Trimmed Out: ${res.trimmedClip.durationFrames}f (${res.deltaFrames}f)")
+    }
+
+    // --- CINEMATIC VFX & SHADER METHODS ---
+    fun toggleCinematicVfxDialog() {
+        _isCinematicVfxDialogOpen.update { !it }
+    }
+
+    fun closeCinematicVfxDialog() {
+        _isCinematicVfxDialogOpen.value = false
+    }
+
+    fun updateCinematicVfxConfig(config: CinematicVfxConfig) {
+        _cinematicVfxConfig.value = config
+    }
+
+    fun updateLightGizmoPosition(normX: Float, normY: Float) {
+        _cinematicVfxConfig.update { cfg ->
+            cfg.copy(lightGizmo = cfg.lightGizmo.copy(x = normX.coerceIn(0.05f, 0.95f), y = normY.coerceIn(0.05f, 0.95f)))
+        }
+    }
+
+    // --- VELOCITY & CUBIC BEZIER GRAPH METHODS ---
+    fun toggleVelocityGraphDialog() {
+        _isVelocityGraphDialogOpen.update { !it }
+    }
+
+    fun closeVelocityGraphDialog() {
+        _isVelocityGraphDialogOpen.value = false
+    }
+
+    fun updateVelocityCurve(curve: CubicBezierCurve) {
+        _velocityCurveState.update { it.copy(curve = curve) }
+    }
+
+    fun applyVelocityCurvePreset(presetCurve: CubicBezierCurve, name: String) {
+        _velocityCurveState.update { it.copy(curve = presetCurve) }
+        showStatus("Applied Curve: $name")
+    }
+
+    // --- 2.5D / 3D MULTIPLANE SPACE METHODS ---
+    fun toggleMultiplaneStageDialog() {
+        _isMultiplaneStageDialogOpen.update { !it }
+        if (_isMultiplaneStageDialogOpen.value) {
+            // Sync layers into stage state
+            val planes = _project.value.layers.map { l ->
+                MultiplaneLayer3D(
+                    layerId = l.id,
+                    name = l.name,
+                    posZ = l.posZ,
+                    rotX = l.rotX,
+                    rotY = l.rotY,
+                    autoScaleCompensation = l.autoScaleComp
+                )
+            }
+            _multiplaneStageState.update { it.copy(layerPlanes = planes, selectedLayerId = _activeLayerId.value) }
+        }
+    }
+
+    fun closeMultiplaneStageDialog() {
+        _isMultiplaneStageDialogOpen.value = false
+    }
+
+    fun updateMultiplaneCamera(cam: VirtualCamera3D) {
+        _multiplaneStageState.update { it.copy(camera = cam) }
+    }
+
+    fun updateLayer3DDepth(layerId: String, z: Float, autoScaleComp: Boolean) {
+        _project.update { p ->
+            val updated = p.layers.map { l ->
+                if (l.id == layerId) l.copy(posZ = z, autoScaleComp = autoScaleComp) else l
+            }
+            p.copy(layers = updated)
+        }
+        _multiplaneStageState.update { st ->
+            val updatedPlanes = st.layerPlanes.map { plane ->
+                if (plane.layerId == layerId) plane.copy(posZ = z, autoScaleCompensation = autoScaleComp) else plane
+            }
+            st.copy(layerPlanes = updatedPlanes)
+        }
+        showStatus("Layer Z-Depth: ${z.toInt()}px")
+    }
+
+    fun toggleLayerOnionSkinPin(layerId: String) {
+        _project.update { p ->
+            val updated = p.layers.map { l ->
+                if (l.id == layerId) l.copy(onionSkinPinned = !l.onionSkinPinned) else l
+            }
+            p.copy(layers = updated)
+        }
+        val isPinned = _project.value.layers.find { it.id == layerId }?.onionSkinPinned == true
+        showStatus(if (isPinned) "🧅 Layer Pinned for Onion Skinning" else "Layer Unpinned")
+    }
+
+    // --- SHIFT AND TRACE (LIGHT TABLE / OUT-OF-PEGS) ---
+    fun toggleShiftAndTrace() {
+        _shiftAndTraceState.update { it.copy(isActive = !it.isActive) }
+        showStatus(if (_shiftAndTraceState.value.isActive) "Shift & Trace Light Table ON" else "Light Table OFF")
+    }
+
+    fun updateShiftAndTrace(offsetX: Float, offsetY: Float, rotationDeg: Float, scale: Float) {
+        _shiftAndTraceState.update {
+            it.copy(
+                offsetX = it.offsetX + offsetX,
+                offsetY = it.offsetY + offsetY,
+                rotationDeg = (it.rotationDeg + rotationDeg) % 360f,
+                scale = (it.scale * scale).coerceIn(0.2f, 5.0f)
+            )
+        }
+    }
+
+    fun resetShiftAndTracePegs() {
+        _shiftAndTraceState.value = ShiftAndTraceState(isActive = _shiftAndTraceState.value.isActive)
+        showStatus("Pegs Reset to Canonical Coordinates")
+    }
+
+    // --- PSYCHOVISUAL SCENE TRANSITIONS ---
+    fun toggleSceneTransitionsDialog() {
+        _isSceneTransitionsDialogOpen.update { !it }
+    }
+
+    fun closeSceneTransitionsDialog() {
+        _isSceneTransitionsDialogOpen.value = false
+    }
+
+    fun applyPsychovisualTransition(config: PsychovisualTransitionConfig) {
+        _psychovisualTransitionConfig.value = config
+        showStatus("Applied ${config.type.title} (${config.durationFrames}f)")
+    }
 }
+
 
