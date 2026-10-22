@@ -44,8 +44,8 @@ data class AnimationNodeGraph(
                     id = "node_layer_src",
                     title = "Line Art Layer",
                     nodeType = AnimationNodeType.LAYER_SOURCE,
-                    x = 100f,
-                    y = 120f,
+                    x = 60f,
+                    y = 80f,
                     outputs = listOf(NodeSocket("out_image", "Image", true)),
                     parameters = mapOf("layerName" to "Line Art", "opacity" to "1.0")
                 ),
@@ -53,8 +53,8 @@ data class AnimationNodeGraph(
                     id = "node_ai_motion",
                     title = "AI Motion Driver",
                     nodeType = AnimationNodeType.AI_MOTION,
-                    x = 100f,
-                    y = 300f,
+                    x = 60f,
+                    y = 360f,
                     outputs = listOf(NodeSocket("out_motion", "Motion Curves", true)),
                     parameters = mapOf("prompt" to "Subtle breathing pulse", "intensity" to "0.8")
                 ),
@@ -62,8 +62,8 @@ data class AnimationNodeGraph(
                     id = "node_fx",
                     title = "Glow & Tone FX",
                     nodeType = AnimationNodeType.COLOR_FX,
-                    x = 450f,
-                    y = 120f,
+                    x = 360f,
+                    y = 80f,
                     inputs = listOf(NodeSocket("in_image", "Input Image", false)),
                     outputs = listOf(NodeSocket("out_image", "Image", true)),
                     parameters = mapOf("effect" to "Warm Studio Bloom", "glow" to "0.5")
@@ -72,8 +72,8 @@ data class AnimationNodeGraph(
                     id = "node_transform",
                     title = "Kinematic Transform",
                     nodeType = AnimationNodeType.TRANSFORM,
-                    x = 450f,
-                    y = 300f,
+                    x = 360f,
+                    y = 360f,
                     inputs = listOf(
                         NodeSocket("in_image", "Input Image", false),
                         NodeSocket("in_motion", "Motion Data", false)
@@ -85,7 +85,7 @@ data class AnimationNodeGraph(
                     id = "node_master_out",
                     title = "Master Composite",
                     nodeType = AnimationNodeType.COMPOSITE_OUTPUT,
-                    x = 800f,
+                    x = 660f,
                     y = 200f,
                     inputs = listOf(NodeSocket("in_composite", "Final In", false)),
                     parameters = mapOf("quality" to "High 1080p", "fps" to "24")

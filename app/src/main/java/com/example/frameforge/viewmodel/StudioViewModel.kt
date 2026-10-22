@@ -245,6 +245,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _isExcalidrawModalOpen = MutableStateFlow(false)
     val isExcalidrawModalOpen: StateFlow<Boolean> = _isExcalidrawModalOpen.asStateFlow()
 
+    private val _isExportDialogOpen = MutableStateFlow(false)
+    val isExportDialogOpen: StateFlow<Boolean> = _isExportDialogOpen.asStateFlow()
+
+    private val _isCanvasLocked = MutableStateFlow(false)
+    val isCanvasLocked: StateFlow<Boolean> = _isCanvasLocked.asStateFlow()
+
     // --- CINEMA SYSTEMS STATE ---
     private val _isCinematicVfxDialogOpen = MutableStateFlow(false)
     val isCinematicVfxDialogOpen: StateFlow<Boolean> = _isCinematicVfxDialogOpen.asStateFlow()
@@ -942,6 +948,42 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun exportCurrentFramePng(onComplete: (File?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { showStatus("Saving Frame PNG...") }
+            val p = _project.value
+            val f = _currentFrame.value
+            val bmp = DrawingEngine.compositeFrame(
+                width = p.canvasWidth,
+                height = p.canvasHeight,
+                frameIndex = f,
+                layers = p.layers,
+                cels = p.cels,
+                backgroundColor = android.graphics.Color.WHITE,
+                pdfTrack = p.pdfTrack,
+                totalFrames = p.totalFrames
+            )
+            val file = storage.exportSingleFramePng(bmp, "frame_${f + 1}_snapshot_${System.currentTimeMillis()}.png")
+            withContext(Dispatchers.Main) {
+                if (file != null) {
+                    showStatus("Saved Frame ${f + 1} PNG: ${file.name}")
+                } else {
+                    showStatus("PNG export failed")
+                }
+                onComplete(file)
+            }
+        }
+    }
+
+    fun toggleExportDialog() {
+        _isExportDialogOpen.value = !_isExportDialogOpen.value
+    }
+
+    fun toggleCanvasLock() {
+        _isCanvasLocked.value = !_isCanvasLocked.value
+        showStatus(if (_isCanvasLocked.value) "🔒 Canvas Locked (No Pan/Zoom)" else "🔓 Canvas Unlocked")
+    }
+
     // --- Tablet Palm Rejection & Pressure Curves ---
     fun setPalmRejectionMode(mode: PalmRejectionMode) {
         _palmRejectionMode.value = mode
@@ -1057,6 +1099,39 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 if (it.id == nodeId) it.copy(x = newX, y = newY) else it
             })
         }
+    }
+
+    fun autoArrangeNodeGraph() {
+        _nodeGraph.update { g ->
+            val col1X = 60f
+            val col2X = 360f
+            val col3X = 660f
+            var col1Y = 80f
+            var col2Y = 80f
+            var col3Y = 180f
+
+            val updatedNodes = g.nodes.map { node ->
+                when (node.nodeType) {
+                    AnimationNodeType.LAYER_SOURCE, AnimationNodeType.AI_MOTION -> {
+                        val n = node.copy(x = col1X, y = col1Y)
+                        col1Y += 280f
+                        n
+                    }
+                    AnimationNodeType.COLOR_FX, AnimationNodeType.TRANSFORM -> {
+                        val n = node.copy(x = col2X, y = col2Y)
+                        col2Y += 280f
+                        n
+                    }
+                    AnimationNodeType.COMPOSITE_OUTPUT -> {
+                        val n = node.copy(x = col3X, y = col3Y)
+                        col3Y += 280f
+                        n
+                    }
+                }
+            }
+            g.copy(nodes = updatedNodes)
+        }
+        showStatus("Nodes Auto-Arranged")
     }
 
     fun addGraphNode(type: AnimationNodeType) {

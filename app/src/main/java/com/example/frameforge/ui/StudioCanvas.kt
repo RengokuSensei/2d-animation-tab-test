@@ -85,6 +85,7 @@ fun StudioCanvas(
     onionSkinConfig: OnionSkinConfig,
     selectedBoneId: String?,
     isIkMode: Boolean,
+    isCanvasLocked: Boolean = false,
     palmRejectionMode: PalmRejectionMode = PalmRejectionMode.AUTOMATIC,
     pressureCurve: PressureCurve = PressureCurve.LINEAR,
     adjustmentState: AdjustmentState = AdjustmentState(),
@@ -113,6 +114,12 @@ fun StudioCanvas(
     var scale by remember { mutableFloatStateOf(1.0f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+
+    var initialDistance by remember { mutableFloatStateOf(0f) }
+    var initialScale by remember { mutableFloatStateOf(1f) }
+    var prevMidX by remember { mutableFloatStateOf(0f) }
+    var prevMidY by remember { mutableFloatStateOf(0f) }
+    var isPinching by remember { mutableStateOf(false) }
 
     var isTransforming by remember { mutableStateOf(false) }
     var isStylusStrokeInProgress by remember { mutableStateOf(false) }
@@ -156,27 +163,62 @@ fun StudioCanvas(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(0.1f, 10.0f)
-                        offsetX += pan.x
-                        offsetY += pan.y
-                    }
-                }
                 .pointerInteropFilter { motionEvent ->
                     val toolType = motionEvent.getToolType(0)
                     val isStylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
-                    val isLargeContact = motionEvent.touchMajor > 40f
+                    val isLargeContact = motionEvent.touchMajor > 35f
 
                     // Smart Palm Rejection:
-                    // 1. If STYLUS_ONLY, any non-stylus is rejected.
+                    // 1. If STYLUS_ONLY, reject all non-stylus touches completely from drawing. Hand/palm produces ZERO stray marks.
                     // 2. If AUTOMATIC, reject if large palm contact or if a stylus stroke is already in progress,
-                    //    or if multiple fingers are touching (pinching/panning).
+                    //    or if multiple fingers are touching.
                     val reject = when (palmRejectionMode) {
                         PalmRejectionMode.STYLUS_ONLY -> !isStylus
                         PalmRejectionMode.AUTOMATIC -> (!isStylus && (isLargeContact || isStylusStrokeInProgress || motionEvent.pointerCount > 1))
                         PalmRejectionMode.FINGER_AND_STYLUS -> motionEvent.pointerCount > 1
                     }
+
+                    // Two-Finger Pinch-Zoom & Pan Navigation
+                    if (motionEvent.pointerCount >= 2) {
+                        val p0x = motionEvent.getX(0)
+                        val p0y = motionEvent.getY(0)
+                        val p1x = motionEvent.getX(1)
+                        val p1y = motionEvent.getY(1)
+                        val dist = kotlin.math.hypot(p1x - p0x, p1y - p0y)
+                        val midX = (p0x + p1x) / 2f
+                        val midY = (p0y + p1y) / 2f
+
+                        if (motionEvent.actionMasked == MotionEvent.ACTION_POINTER_DOWN || !isPinching) {
+                            isPinching = true
+                            initialDistance = dist
+                            initialScale = scale
+                            prevMidX = midX
+                            prevMidY = midY
+                            if (isStylusStrokeInProgress) {
+                                onFinishStroke()
+                            }
+                            isStylusStrokeInProgress = false
+                        } else if (motionEvent.actionMasked == MotionEvent.ACTION_MOVE && isPinching) {
+                            if (!isCanvasLocked) {
+                                if (initialDistance > 10f && dist > 10f) {
+                                    val factor = dist / initialDistance
+                                    scale = (initialScale * factor).coerceIn(0.1f, 10.0f)
+                                }
+                                val panX = midX - prevMidX
+                                val panY = midY - prevMidY
+                                offsetX += panX
+                                offsetY += panY
+                            }
+                            prevMidX = midX
+                            prevMidY = midY
+                        }
+                        if (motionEvent.actionMasked == MotionEvent.ACTION_POINTER_UP || motionEvent.actionMasked == MotionEvent.ACTION_UP) {
+                            isPinching = false
+                        }
+                        return@pointerInteropFilter true
+                    }
+
+                    isPinching = false
 
                     // If adjustment mode is active, dragging left/right adjusts intensity dynamically
                     if (adjustmentState.activeType != AdjustmentType.NONE) {
@@ -249,9 +291,6 @@ fun StudioCanvas(
 
                                     onUpdateStrokeBatch(batch)
                                 }
-                            } else if (motionEvent.pointerCount > 1) {
-                                isTransforming = true
-                                isStylusStrokeInProgress = false
                             }
                             true
                         }
@@ -260,7 +299,7 @@ fun StudioCanvas(
                                 isDraggingLightGizmo = false
                                 return@pointerInteropFilter true
                             }
-                            if (!isTransforming && currentTool != ToolType.BONE_RIG) {
+                            if (!isTransforming && currentTool != ToolType.BONE_RIG && !reject) {
                                 onFinishStroke()
                             }
                             isTransforming = false
@@ -574,8 +613,8 @@ fun StudioCanvas(
         if (shiftAndTraceState.isActive) {
             Card(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 96.dp)
+                    .align(Alignment.TopStart)
+                    .padding(start = 68.dp, top = 56.dp)
                     .testTag("shift_trace_hud"),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xF218181B)),

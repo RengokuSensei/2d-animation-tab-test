@@ -106,6 +106,8 @@ fun StudioScreen(
     val isRippleEditActive by viewModel.isRippleEditActive.collectAsState()
     val isMagneticSnappingActive by viewModel.isMagneticSnappingActive.collectAsState()
     val autoAdvanceState by viewModel.autoAdvanceState.collectAsState()
+    val isExportDialogOpen by viewModel.isExportDialogOpen.collectAsState()
+    val isCanvasLocked by viewModel.isCanvasLocked.collectAsState()
 
     val pdfPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -116,13 +118,14 @@ fun StudioScreen(
     }
 
     val hasModalOpen = isGalleryDialogOpen || isActionsPopoverOpen || isAdjustmentsPopoverOpen ||
-        isBrushStudioOpen || isLayersPopoverOpen || isColorPickerOpen ||
+        isBrushStudioOpen || isLayersPopoverOpen || isColorPickerOpen || isExportDialogOpen ||
         transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen ||
         isExcalidrawModalOpen || isCinematicVfxDialogOpen || isVelocityGraphDialogOpen ||
         isMultiplaneStageDialogOpen || isSceneTransitionsDialogOpen
 
     BackHandler(enabled = hasModalOpen) {
         when {
+            isExportDialogOpen -> viewModel.toggleExportDialog()
             isCinematicVfxDialogOpen -> viewModel.closeCinematicVfxDialog()
             isVelocityGraphDialogOpen -> viewModel.closeVelocityGraphDialog()
             isMultiplaneStageDialogOpen -> viewModel.closeMultiplaneStageDialog()
@@ -160,7 +163,8 @@ fun StudioScreen(
                     onUpdateNodePosition = { id, x, y -> viewModel.updateNodePosition(id, x, y) },
                     onAddNode = { type -> viewModel.addGraphNode(type) },
                     onDeleteNode = { id -> viewModel.deleteGraphNode(id) },
-                    onUpdateParameter = { id, k, v -> viewModel.updateNodeParameter(id, k, v) }
+                    onUpdateParameter = { id, k, v -> viewModel.updateNodeParameter(id, k, v) },
+                    onAutoArrange = { viewModel.autoArrangeNodeGraph() }
                 )
             } else {
                 StudioCanvas(
@@ -171,6 +175,7 @@ fun StudioScreen(
                     onionSkinConfig = onionSkinConfig,
                     selectedBoneId = selectedBoneId,
                     isIkMode = isIkMode,
+                    isCanvasLocked = isCanvasLocked,
                     palmRejectionMode = palmRejectionMode,
                     pressureCurve = pressureCurve,
                     adjustmentState = adjustmentState,
@@ -214,6 +219,19 @@ fun StudioScreen(
                 isDreamsTracksVisible = isDreamsMultiTrackVisible,
                 isNodeGraphActive = isNodeGraphViewActive,
                 isExcalidrawOpen = isExcalidrawModalOpen,
+                isExportOpen = isExportDialogOpen,
+                isCanvasLocked = isCanvasLocked,
+                palmRejectionMode = palmRejectionMode,
+                onToggleCanvasLock = { viewModel.toggleCanvasLock() },
+                onTogglePalmRejectionMode = {
+                    val nextMode = when (palmRejectionMode) {
+                        PalmRejectionMode.AUTOMATIC -> PalmRejectionMode.STYLUS_ONLY
+                        PalmRejectionMode.STYLUS_ONLY -> PalmRejectionMode.FINGER_AND_STYLUS
+                        PalmRejectionMode.FINGER_AND_STYLUS -> PalmRejectionMode.AUTOMATIC
+                    }
+                    viewModel.setPalmRejectionMode(nextMode)
+                },
+                onExportClick = { viewModel.toggleExportDialog() },
                 isAutoAdvanceEnabled = autoAdvanceState.isEnabled,
                 autoAdvanceState = autoAdvanceState,
                 isVfxOpen = isCinematicVfxDialogOpen,
@@ -264,7 +282,7 @@ fun StudioScreen(
             }
 
             // --- 4. FLOATING CONTEXTUAL SELECTION DOCK ---
-            if (selectionState.isActive) {
+            if (selectionState.isActive && !isNodeGraphViewActive) {
                 SelectionDock(
                     selectionState = selectionState,
                     onSetMode = { viewModel.setSelectionMode(it) },
@@ -277,7 +295,7 @@ fun StudioScreen(
             }
 
             // --- 5. FLOATING CONTEXTUAL TRANSFORM DOCK ---
-            if (transformState.isActive) {
+            if (transformState.isActive && !isNodeGraphViewActive) {
                 TransformDock(
                     transformState = transformState,
                     onSetMode = { viewModel.setTransformMode(it) },
@@ -535,6 +553,20 @@ fun StudioScreen(
                     onApplyTransition = { viewModel.applyPsychovisualTransition(psychovisualTransitionConfig); viewModel.closeSceneTransitionsDialog() },
                     onClose = { viewModel.closeSceneTransitionsDialog() },
                     modifier = Modifier.align(Alignment.Center)
+                )
+            }
+
+            // 5. Dedicated Export Studio Dialog (MP4, GIF, PNG, Sequence)
+            if (isExportDialogOpen) {
+                com.example.frameforge.ui.popovers.ExportStudioDialog(
+                    totalFrames = project.totalFrames,
+                    fps = project.fps,
+                    currentFrame = currentFrame,
+                    onExportMp4 = { cb -> viewModel.exportMp4(cb) },
+                    onExportGif = { bg, cb -> viewModel.exportGif(bg, cb) },
+                    onExportCurrentFramePng = { cb -> viewModel.exportCurrentFramePng(cb) },
+                    onExportPngSequence = { cb -> viewModel.exportPngSequence(cb) },
+                    onDismiss = { viewModel.toggleExportDialog() }
                 )
             }
         }

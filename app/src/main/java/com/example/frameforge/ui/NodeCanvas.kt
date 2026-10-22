@@ -70,6 +70,7 @@ fun NodeCanvas(
     onAddNode: (AnimationNodeType) -> Unit,
     onDeleteNode: (String) -> Unit,
     onUpdateParameter: (String, String, String) -> Unit,
+    onAutoArrange: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var panX by remember { mutableFloatStateOf(0f) }
@@ -80,19 +81,22 @@ fun NodeCanvas(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF0F1115))
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, gestureZoom, _ ->
-                    panX += pan.x
-                    panY += pan.y
-                    zoom = (zoom * gestureZoom).coerceIn(0.4f, 2.5f)
-                }
-            }
             .testTag("node_canvas_workspace")
     ) {
         val nodeMap = remember(graph.nodes) { graph.nodes.associateBy { it.id } }
 
-        // 1. Draw Background Grid and Bezier Connection Wires
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        // 1. Draw Background Grid and Bezier Connection Wires (Handles Canvas Panning & Zoom)
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, gestureZoom, _ ->
+                        panX += pan.x
+                        panY += pan.y
+                        zoom = (zoom * gestureZoom).coerceIn(0.4f, 2.5f)
+                    }
+                }
+        ) {
             // Draw grid dots
             val dotSpacing = 30f * zoom
             val startX = (panX % dotSpacing)
@@ -209,6 +213,25 @@ fun NodeCanvas(
                 Icon(Icons.Default.AutoAwesome, contentDescription = "AI", modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("+ AI Motion", fontSize = 11.sp)
+            }
+
+            FilledTonalButton(
+                onClick = onAutoArrange,
+                modifier = Modifier.height(34.dp).testTag("auto_arrange_nodes"),
+                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF10B981))
+            ) {
+                Text("📐 Auto-Arrange", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            FilledTonalButton(
+                onClick = {
+                    panX = 0f
+                    panY = 0f
+                    zoom = 1f
+                },
+                modifier = Modifier.height(34.dp).testTag("reset_node_view")
+            ) {
+                Text("🔍 Reset View", fontSize = 11.sp)
             }
         }
     }

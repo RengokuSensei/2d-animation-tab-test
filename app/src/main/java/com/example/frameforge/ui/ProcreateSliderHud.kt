@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -153,6 +154,9 @@ private fun VerticalBarSlider(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentValue by rememberUpdatedState(value)
+
     Box(
         modifier = modifier
             .width(28.dp)
@@ -162,8 +166,8 @@ private fun VerticalBarSlider(
                 detectVerticalDragGestures { change, dragAmount ->
                     change.consume()
                     // Dragging up increases, down decreases
-                    val delta = -dragAmount / 100f
-                    onValueChange((value + delta).coerceIn(0.01f, 1f))
+                    val delta = -dragAmount / 120f
+                    currentOnValueChange((currentValue + delta).coerceIn(0.01f, 1f))
                 }
             },
         contentAlignment = Alignment.BottomCenter

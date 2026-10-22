@@ -38,6 +38,8 @@ object MermaidDiagramEngine {
         val nodesMap = mutableMapOf<String, MermaidNode>()
         val edgesList = mutableListOf<MermaidEdge>()
 
+        val arrowPattern = Regex("""(-->\|[^|]*\||--\s*[^->]*\s*-->|-->|-.->|==>|---|---\|[^|]*\|)""")
+
         for (line in lines) {
             val lower = line.lowercase()
             if (lower.startsWith("graph") || lower.startsWith("flowchart")) {
@@ -48,17 +50,21 @@ object MermaidDiagramEngine {
                 continue
             }
 
-            // 1. Extract all node definitions present on the line
-            extractNodesFromLine(line, nodesMap)
-
-            // 2. Parse edges, e.g. A --> B or A -->|text| B or A -- text --> B
-            val edgeRegex = Regex("""([a-zA-Z0-9_]+)\s*(?:\[[^]]*]|\([^)]*\)|\{[^}]*}|\[\([^)]*\)]|\(\([^)]*\)\)|\(\[[^]]*]\))?\s*(-->|-.->|==>|--\s*[^->]*\s*-->|-->\|[^|]*\|)\s*([a-zA-Z0-9_]+)""")
-            val match = edgeRegex.find(line)
-
+            // Check if line contains an edge (A --> B)
+            val match = arrowPattern.find(line)
             if (match != null) {
-                val fromRaw = match.groupValues[1]
-                val arrowRaw = match.groupValues[2]
-                val toRaw = match.groupValues[3]
+                val leftPart = line.substring(0, match.range.first).trim()
+                val arrowRaw = match.value
+                val rightPart = line.substring(match.range.last + 1).trim()
+
+                val fromNode = parseNodeToken(leftPart)
+                val toNode = parseNodeToken(rightPart)
+
+                if (fromNode != null) nodesMap[fromNode.id] = fromNode
+                if (toNode != null) nodesMap[toNode.id] = toNode
+
+                val fromId = fromNode?.id ?: leftPart.filter { it.isLetterOrDigit() || it == '_' }
+                val toId = toNode?.id ?: rightPart.filter { it.isLetterOrDigit() || it == '_' }
 
                 var edgeLabel: String? = null
                 if (arrowRaw.contains("|")) {
@@ -70,14 +76,15 @@ object MermaidDiagramEngine {
                 val isDotted = arrowRaw.contains("-.-")
                 val isThick = arrowRaw.contains("==")
 
-                if (!nodesMap.containsKey(fromRaw)) {
-                    nodesMap[fromRaw] = MermaidNode(id = fromRaw, label = fromRaw, shape = ExcalidrawShapeType.RECTANGLE)
+                if (fromId.isNotBlank() && toId.isNotBlank()) {
+                    edgesList.add(MermaidEdge(fromId, toId, edgeLabel, isDotted, isThick))
                 }
-                if (!nodesMap.containsKey(toRaw)) {
-                    nodesMap[toRaw] = MermaidNode(id = toRaw, label = toRaw, shape = ExcalidrawShapeType.RECTANGLE)
+            } else {
+                // Standalone node definition e.g. A[User Label]
+                val node = parseNodeToken(line)
+                if (node != null) {
+                    nodesMap[node.id] = node
                 }
-
-                edgesList.add(MermaidEdge(fromRaw, toRaw, edgeLabel, isDotted, isThick))
             }
         }
 
@@ -89,27 +96,44 @@ object MermaidDiagramEngine {
         )
     }
 
-    private fun extractNodesFromLine(line: String, nodesMap: MutableMap<String, MermaidNode>) {
-        val patterns = listOf(
-            Regex("""([a-zA-Z0-9_]+)\s*\[\((.*?)\)]""") to ExcalidrawShapeType.CYLINDER,
-            Regex("""([a-zA-Z0-9_]+)\s*\(\((.*?)\)\)""") to ExcalidrawShapeType.ELLIPSE,
-            Regex("""([a-zA-Z0-9_]+)\s*\{(.*?)}""") to ExcalidrawShapeType.DIAMOND,
-            Regex("""([a-zA-Z0-9_]+)\s*\(\[(.*?)]\)""") to ExcalidrawShapeType.ROUNDED_RECT,
-            Regex("""([a-zA-Z0-9_]+)\s*\((.*?)\)""") to ExcalidrawShapeType.ROUNDED_RECT,
-            Regex("""([a-zA-Z0-9_]+)\s*\[(.*?)]""") to ExcalidrawShapeType.RECTANGLE
-        )
+    private fun parseNodeToken(token: String): MermaidNode? {
+        val trimmed = token.trim()
+        if (trimmed.isEmpty()) return null
 
-        val parsedIds = mutableSetOf<String>()
-        for ((regex, shape) in patterns) {
-            val matches = regex.findAll(line)
-            for (m in matches) {
-                val id = m.groupValues[1]
-                if (parsedIds.contains(id)) continue
-                val label = m.groupValues[2].trim()
-                nodesMap[id] = MermaidNode(id = id, label = if (label.isNotBlank()) label else id, shape = shape)
-                parsedIds.add(id)
-            }
+        // Cylinder [( ... )]
+        val cyl = Regex("""^([a-zA-Z0-9_]+)\s*\[\((.*?)\)]$""").find(trimmed)
+        if (cyl != null) return MermaidNode(cyl.groupValues[1], cyl.groupValues[2].ifBlank { cyl.groupValues[1] }, ExcalidrawShapeType.CYLINDER)
+
+        // Stadium ([ ... ])
+        val stadium = Regex("""^([a-zA-Z0-9_]+)\s*\(\[(.*?)]\)$""").find(trimmed)
+        if (stadium != null) return MermaidNode(stadium.groupValues[1], stadium.groupValues[2].ifBlank { stadium.groupValues[1] }, ExcalidrawShapeType.ROUNDED_RECT)
+
+        // Circle (( ... ))
+        val circle = Regex("""^([a-zA-Z0-9_]+)\s*\(\((.*?)\)\)$""").find(trimmed)
+        if (circle != null) return MermaidNode(circle.groupValues[1], circle.groupValues[2].ifBlank { circle.groupValues[1] }, ExcalidrawShapeType.ELLIPSE)
+
+        // Hexagon {{ ... }}
+        val hex = Regex("""^([a-zA-Z0-9_]+)\s*\{\{(.*?)}}$""").find(trimmed)
+        if (hex != null) return MermaidNode(hex.groupValues[1], hex.groupValues[2].ifBlank { hex.groupValues[1] }, ExcalidrawShapeType.HEXAGON)
+
+        // Diamond { ... }
+        val diamond = Regex("""^([a-zA-Z0-9_]+)\s*\{(.*?)}$""").find(trimmed)
+        if (diamond != null) return MermaidNode(diamond.groupValues[1], diamond.groupValues[2].ifBlank { diamond.groupValues[1] }, ExcalidrawShapeType.DIAMOND)
+
+        // Rectangle [ ... ]
+        val rect = Regex("""^([a-zA-Z0-9_]+)\s*\[(.*?)]$""").find(trimmed)
+        if (rect != null) return MermaidNode(rect.groupValues[1], rect.groupValues[2].ifBlank { rect.groupValues[1] }, ExcalidrawShapeType.RECTANGLE)
+
+        // Rounded ( ... )
+        val rounded = Regex("""^([a-zA-Z0-9_]+)\s*\((.*?)\)$""").find(trimmed)
+        if (rounded != null) return MermaidNode(rounded.groupValues[1], rounded.groupValues[2].ifBlank { rounded.groupValues[1] }, ExcalidrawShapeType.ROUNDED_RECT)
+
+        // Plain word ID
+        val plainId = trimmed.takeWhile { it.isLetterOrDigit() || it == '_' }
+        if (plainId.isNotEmpty()) {
+            return MermaidNode(plainId, plainId, ExcalidrawShapeType.RECTANGLE)
         }
+        return null
     }
 
     /**

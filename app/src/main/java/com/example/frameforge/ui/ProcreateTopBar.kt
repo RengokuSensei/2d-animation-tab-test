@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.Gesture
@@ -71,6 +72,12 @@ fun ProcreateTopBar(
     isDreamsTracksVisible: Boolean,
     isNodeGraphActive: Boolean,
     isExcalidrawOpen: Boolean = false,
+    isExportOpen: Boolean = false,
+    isCanvasLocked: Boolean = false,
+    palmRejectionMode: com.example.frameforge.model.PalmRejectionMode = com.example.frameforge.model.PalmRejectionMode.AUTOMATIC,
+    onToggleCanvasLock: () -> Unit = {},
+    onTogglePalmRejectionMode: () -> Unit = {},
+    onExportClick: () -> Unit = {},
     isAutoAdvanceEnabled: Boolean = false,
     autoAdvanceState: com.example.frameforge.cinema.AutoAdvanceState = com.example.frameforge.cinema.AutoAdvanceState(),
     isVfxOpen: Boolean = false,
@@ -191,6 +198,19 @@ fun ProcreateTopBar(
                         contentDescription = "Excalidraw AI & Diagrams",
                         tint = if (isExcalidrawOpen) Color(0xFFA5B4FC) else Color(0xFF818CF8),
                         modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Export (Share / Save MP4, GIF, PNG)
+                IconButton(
+                    onClick = onExportClick,
+                    modifier = Modifier.size(34.dp).testTag("export_tool_button")
+                ) {
+                    Icon(
+                        Icons.Default.Share,
+                        contentDescription = "Export MP4 / GIF / PNG",
+                        tint = if (isExportOpen) Color(0xFF38BDF8) else Color.LightGray,
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }
@@ -433,6 +453,61 @@ fun ProcreateTopBar(
 
             // --- RIGHT CLUSTER (Paint, Smudge, Eraser, Layers, Color Disc) ---
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // 🔒 Lock Canvas pill
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isCanvasLocked) Color(0x33FFB300) else Color(0x1AFFFFFF),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isCanvasLocked) Color(0xFFFFB300) else Color(0x33FFFFFF)),
+                    modifier = Modifier.clickable { onToggleCanvasLock() }.testTag("toggle_canvas_lock_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(if (isCanvasLocked) "🔒 Locked" else "🔓 Lock", color = if (isCanvasLocked) Color(0xFFFFB300) else Color.LightGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // 🖊️ Stylus / Palm Rejection toggle
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = when (palmRejectionMode) {
+                        com.example.frameforge.model.PalmRejectionMode.STYLUS_ONLY -> Color(0x3300E5FF)
+                        com.example.frameforge.model.PalmRejectionMode.AUTOMATIC -> Color(0x3310B981)
+                        com.example.frameforge.model.PalmRejectionMode.FINGER_AND_STYLUS -> Color(0x1AFFFFFF)
+                    },
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        when (palmRejectionMode) {
+                            com.example.frameforge.model.PalmRejectionMode.STYLUS_ONLY -> Color(0xFF00E5FF)
+                            com.example.frameforge.model.PalmRejectionMode.AUTOMATIC -> Color(0xFF10B981)
+                            com.example.frameforge.model.PalmRejectionMode.FINGER_AND_STYLUS -> Color(0x33FFFFFF)
+                        }
+                    ),
+                    modifier = Modifier.clickable { onTogglePalmRejectionMode() }.testTag("toggle_palm_rejection_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val label = when (palmRejectionMode) {
+                            com.example.frameforge.model.PalmRejectionMode.STYLUS_ONLY -> "🖊️ Stylus Only"
+                            com.example.frameforge.model.PalmRejectionMode.AUTOMATIC -> "🛡️ Palm Auto"
+                            com.example.frameforge.model.PalmRejectionMode.FINGER_AND_STYLUS -> "👆 Touch & Pen"
+                        }
+                        val tint = when (palmRejectionMode) {
+                            com.example.frameforge.model.PalmRejectionMode.STYLUS_ONLY -> Color(0xFF38BDF8)
+                            com.example.frameforge.model.PalmRejectionMode.AUTOMATIC -> Color(0xFF34D399)
+                            com.example.frameforge.model.PalmRejectionMode.FINGER_AND_STYLUS -> Color.LightGray
+                        }
+                        Text(label, color = tint, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 val isPaintActive = currentTool != ToolType.SMUDGE &&
                         currentTool != ToolType.ERASER &&
                         currentTool != ToolType.SOFT_ERASER &&

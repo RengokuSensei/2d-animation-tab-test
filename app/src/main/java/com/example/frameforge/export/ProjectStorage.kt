@@ -158,6 +158,19 @@ class ProjectStorage(private val context: Context) {
         return result
     }
 
+    fun exportSingleFramePng(bitmap: Bitmap, filename: String = "frame_${System.currentTimeMillis()}.png"): File? {
+        return try {
+            val file = File(exportDir, filename)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     // --- JSON Serialization ---
 
     private fun serializeProject(p: AnimationProject): JSONObject {

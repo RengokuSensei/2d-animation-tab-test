@@ -365,8 +365,23 @@ private fun TextToDiagramTab(
                     onClick = {
                         onGenerate()
                         coroutineScope.launch {
-                            val res = TextToDiagramEngine.generateDiagram(prompt)
-                            onSetResult(res)
+                            try {
+                                val res = TextToDiagramEngine.generateDiagram(prompt)
+                                onSetResult(res)
+                            } catch (e: Exception) {
+                                val defCode = TextToDiagramEngine.generateOfflineMermaid(prompt)
+                                val parsed = MermaidDiagramEngine.parseMermaid(defCode)
+                                val st = MermaidDiagramEngine.renderDiagramToStrokes(parsed)
+                                onSetResult(
+                                    TextToDiagramResult(
+                                        prompt = prompt,
+                                        mermaidCode = defCode,
+                                        strokes = st,
+                                        isFromAi = false,
+                                        message = "Generated via Offline Smart Synthesizer"
+                                    )
+                                )
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp).testTag("generate_diagram_button"),
@@ -446,15 +461,14 @@ private fun TextToDiagramTab(
                 Button(
                     onClick = {
                         val res = lastResult
-                        if (res != null) {
-                            onStamp(res.strokes)
+                        val strokesToStamp = if (res != null && res.strokes.isNotEmpty()) {
+                            res.strokes
                         } else {
-                            // Synthesize on the fly
-                            val defCode = TextToDiagramEngine.generateOfflineMermaid(prompt)
-                            val parsed = MermaidDiagramEngine.parseMermaid(defCode)
-                            val st = MermaidDiagramEngine.renderDiagramToStrokes(parsed)
-                            onStamp(st)
+                            val codeToUse = res?.mermaidCode ?: TextToDiagramEngine.generateOfflineMermaid(prompt)
+                            val parsed = MermaidDiagramEngine.parseMermaid(codeToUse)
+                            MermaidDiagramEngine.renderDiagramToStrokes(parsed)
                         }
+                        onStamp(strokesToStamp)
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp).testTag("stamp_diagram_button"),
                     shape = RoundedCornerShape(12.dp),

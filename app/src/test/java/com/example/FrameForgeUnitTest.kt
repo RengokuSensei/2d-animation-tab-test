@@ -633,5 +633,26 @@ class FrameForgeUnitTest {
         val sCurve = (3f * p * p - 2f * p * p * p)
         assertEquals(0.5f, sCurve, 0.01f)
     }
+
+    @Test
+    fun testMermaidDiagramParsingAndStrokes() {
+        val mermaidCode = """
+            flowchart TD
+                User([Mobile Client]) --> Gateway[API Gateway]
+                Gateway --> Auth{Valid Auth?}
+                Auth -->|Yes| DB[(Cloud Database)]
+        """.trimIndent()
+
+        val parsed = com.example.frameforge.ai.MermaidDiagramEngine.parseMermaid(mermaidCode)
+        assertEquals(4, parsed.nodes.size)
+        assertTrue(parsed.nodes.containsKey("User"))
+        assertEquals("Mobile Client", parsed.nodes["User"]?.label)
+        assertEquals(com.example.frameforge.ai.ExcalidrawShapeType.ROUNDED_RECT, parsed.nodes["User"]?.shape)
+        assertEquals(com.example.frameforge.ai.ExcalidrawShapeType.CYLINDER, parsed.nodes["DB"]?.shape)
+        assertEquals(3, parsed.edges.size)
+
+        val strokes = com.example.frameforge.ai.MermaidDiagramEngine.renderDiagramToStrokes(parsed)
+        assertTrue("Rendered strokes should not be empty", strokes.isNotEmpty())
+    }
 }
 
