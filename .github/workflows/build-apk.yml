@@ -16,18 +16,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses & install platforms
+      - name: Accept Android SDK licenses
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
@@ -49,7 +45,7 @@ jobs:
 
       - name: List built APKs
         run: |
-          ls -la app/build/outputs/apk/debug/
+          ls -lh app/build/outputs/apk/debug/
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
