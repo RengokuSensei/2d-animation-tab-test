@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -152,12 +153,13 @@ fun StudioCanvas(
             .background(Color(0xFF0F1115))
             .testTag("studio_canvas_viewport")
     ) {
-        val containerWidth = maxWidth.value
-        val containerHeight = maxHeight.value
+        val density = LocalDensity.current
+        val containerWidthPx = with(density) { maxWidth.toPx() }
+        val containerHeightPx = with(density) { maxHeight.toPx() }
 
         fun screenToDoc(screenX: Float, screenY: Float): Offset {
-            val cx = containerWidth / 2f + offsetX
-            val cy = containerHeight / 2f + offsetY
+            val cx = containerWidthPx / 2f + offsetX
+            val cy = containerHeightPx / 2f + offsetY
             val docX = (screenX - cx) / scale + project.canvasWidth / 2f
             val docY = (screenY - cy) / scale + project.canvasHeight / 2f
             return Offset(docX, docY)
@@ -226,7 +228,7 @@ fun StudioCanvas(
                     // If adjustment mode is active, dragging left/right adjusts intensity dynamically
                     if (adjustmentState.activeType != AdjustmentType.NONE) {
                         if (motionEvent.actionMasked == MotionEvent.ACTION_MOVE || motionEvent.actionMasked == MotionEvent.ACTION_DOWN) {
-                            val ratio = (motionEvent.x / (containerWidth.coerceAtLeast(1f))).coerceIn(0.01f, 1.0f)
+                            val ratio = (motionEvent.x / (containerWidthPx.coerceAtLeast(1f))).coerceIn(0.01f, 1.0f)
                             onUpdateAdjustmentIntensity(ratio)
                         }
                         return@pointerInteropFilter true

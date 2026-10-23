@@ -339,6 +339,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _renderFarmProgress = MutableStateFlow(RenderProgressUpdate())
     val renderFarmProgress: StateFlow<RenderProgressUpdate> = _renderFarmProgress.asStateFlow()
 
+    private val _localExportState = MutableStateFlow(LocalExportState())
+    val localExportState: StateFlow<LocalExportState> = _localExportState.asStateFlow()
+
     private val _isRenderFarmDialogOpen = MutableStateFlow(false)
     val isRenderFarmDialogOpen: StateFlow<Boolean> = _isRenderFarmDialogOpen.asStateFlow()
 
@@ -979,14 +982,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun exportMp4(onComplete: (File?) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) { showStatus("Encoding MP4 Video...") }
             val p = _project.value
+            _localExportState.value = LocalExportState(
+                isExporting = true,
+                totalFrames = p.totalFrames
+            )
+            withContext(Dispatchers.Main) { showStatus("Encoding MP4 Video...") }
 
             val file = storage.exportMp4Streaming(
                 width = p.canvasWidth,
                 height = p.canvasHeight,
                 fps = p.fps,
-                totalFrames = p.totalFrames
+                totalFrames = p.totalFrames,
+                onProgress = { curr, total ->
+                    _localExportState.update {
+                        it.copy(
+                            currentFrame = curr,
+                            progress = curr.toFloat() / total.coerceAtLeast(1)
+                        )
+                    }
+                }
             ) { frameIndex ->
                 DrawingEngine.compositeFrame(
                     width = p.canvasWidth,
@@ -1000,10 +1015,24 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
 
+            val galleryUri = if (file != null) storage.publishToGallery(file) else null
+
             withContext(Dispatchers.Main) {
                 if (file != null) {
-                    showStatus("MP4 Video Exported: ${file.name}")
+                    _localExportState.value = LocalExportState(
+                        isExporting = false,
+                        currentFrame = p.totalFrames,
+                        totalFrames = p.totalFrames,
+                        progress = 1.0f,
+                        exportedFile = file,
+                        galleryUri = galleryUri
+                    )
+                    showStatus("Exported MP4: ${file.name} (Saved to Movies/FrameForge)")
                 } else {
+                    _localExportState.value = LocalExportState(
+                        isExporting = false,
+                        error = "Encoding failed"
+                    )
                     showStatus("MP4 Export failed")
                 }
                 onComplete(file)
@@ -1175,8 +1204,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun autoArrangeNodeGraph() {
         _nodeGraph.update { g ->
             val col1X = 60f
-            val col2X = 460f
-            val col3X = 860f
+            val col2X = 720f
+            val col3X = 1380f
             var col1Y = 60f
             var col2Y = 60f
             var col3Y = 220f
@@ -1185,17 +1214,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 when (node.nodeType) {
                     AnimationNodeType.LAYER_SOURCE, AnimationNodeType.AI_MOTION -> {
                         val n = node.copy(x = col1X, y = col1Y)
-                        col1Y += 280f
+                        col1Y += 360f
                         n
                     }
                     AnimationNodeType.COLOR_FX, AnimationNodeType.TRANSFORM -> {
                         val n = node.copy(x = col2X, y = col2Y)
-                        col2Y += 280f
+                        col2Y += 360f
                         n
                     }
                     AnimationNodeType.COMPOSITE_OUTPUT -> {
                         val n = node.copy(x = col3X, y = col3Y)
-                        col3Y += 280f
+                        col3Y += 360f
                         n
                     }
                 }
@@ -2175,5 +2204,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _renderFarmProgress.value = RenderProgressUpdate(state = RenderJobState.IDLE)
     }
 }
+
+data class LocalExportState(
+    val isExporting: Boolean = false,
+    val currentFrame: Int = 0,
+    val totalFrames: Int = 0,
+    val progress: Float = 0f,
+    val exportedFile: java.io.File? = null,
+    val galleryUri: android.net.Uri? = null,
+    val error: String? = null
+)
 
 

@@ -1,0 +1,16 @@
+[package]
+name = "frameforge-jni"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "frameforge"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+frameforge-core = { path = "../frameforge-core" }
+jni = { version = "0.21", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

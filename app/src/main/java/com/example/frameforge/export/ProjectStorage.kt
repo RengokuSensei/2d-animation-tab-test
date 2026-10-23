@@ -106,11 +106,12 @@ class ProjectStorage(private val context: Context) {
         height: Int,
         fps: Int,
         totalFrames: Int,
+        onProgress: ((currentFrame: Int, totalFrames: Int) -> Unit)? = null,
         frameProvider: (frameIndex: Int) -> Bitmap?
     ): File? {
         if (totalFrames <= 0) return null
         return try {
-            val outFile = File(exportDir, "animation_${System.currentTimeMillis()}.mp4")
+            val outFile = File(exportDir, "frameforge_${System.currentTimeMillis()}.mp4")
             val encoder = Mp4Encoder()
             val success = encoder.encodeStreamingMp4(
                 outputFile = outFile,
@@ -118,12 +119,47 @@ class ProjectStorage(private val context: Context) {
                 height = height,
                 totalFrames = totalFrames,
                 fps = fps,
-                frameProvider = frameProvider
+                frameProvider = { index ->
+                    onProgress?.invoke(index + 1, totalFrames)
+                    frameProvider(index)
+                }
             )
             if (success && outFile.exists() && outFile.length() > 0) outFile else null
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    fun publishToGallery(file: File): android.net.Uri? {
+        val resolver = context.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, file.name)
+            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/FrameForge")
+                put(android.provider.MediaStore.Video.Media.IS_PENDING, 1)
+            }
+        }
+
+        val uri = resolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                file.inputStream().use { input ->
+                    input.copyTo(out)
+                }
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+            return uri
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
         }
     }
 

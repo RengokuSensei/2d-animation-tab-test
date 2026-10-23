@@ -24,7 +24,9 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -66,6 +68,7 @@ fun DeliverWorkspace(
     project: AnimationProject,
     renderFarmNode: RenderFarmNode,
     renderFarmProgress: RenderProgressUpdate,
+    localExportState: com.example.frameforge.viewmodel.LocalExportState = com.example.frameforge.viewmodel.LocalExportState(),
     onStartLocalExport: (String) -> Unit,
     onDispatchToRenderFarm: () -> Unit,
     onCancelRender: () -> Unit = {},
@@ -233,8 +236,87 @@ fun DeliverWorkspace(
                     .padding(18.dp),
                 contentAlignment = Alignment.Center
             ) {
-                val isRendering = renderFarmProgress.state == RenderJobState.RENDERING || renderFarmProgress.state == RenderJobState.UPLOADING
-                if (isRendering) {
+                val isFarmRendering = renderFarmProgress.state == RenderJobState.RENDERING || renderFarmProgress.state == RenderJobState.UPLOADING
+                val isLocalRendering = localExportState.isExporting
+                val hasExported = localExportState.exportedFile != null
+                val context = androidx.compose.ui.platform.LocalContext.current
+
+                if (isLocalRendering) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { localExportState.progress },
+                            modifier = Modifier.size(80.dp),
+                            color = ProcreateBlue,
+                            strokeWidth = 6.dp
+                        )
+
+                        Text(
+                            text = "Exporting Frame ${localExportState.currentFrame} / ${localExportState.totalFrames}",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+
+                        Text(
+                            text = "${(localExportState.progress * 100).toInt()}% Rendered to Tablet",
+                            color = ProcreateBlue,
+                            fontSize = 12.sp
+                        )
+                    }
+                } else if (hasExported) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldGreen, modifier = Modifier.size(54.dp))
+                        Text("Export Complete!", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(
+                            text = "Saved to Movies/FrameForge (${localExportState.exportedFile?.name})",
+                            color = EmeraldGreen,
+                            fontSize = 12.sp
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            localExportState.galleryUri?.let { uri ->
+                                Button(
+                                    onClick = {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, "video/mp4")
+                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(intent)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ProcreateBlue),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Play Video", fontSize = 12.sp)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                            type = "video/mp4"
+                                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(android.content.Intent.createChooser(intent, "Share Animation Video"))
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Share MP4", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                } else if (isFarmRendering) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)

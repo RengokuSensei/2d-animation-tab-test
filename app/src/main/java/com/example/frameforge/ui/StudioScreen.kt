@@ -93,6 +93,7 @@ fun StudioScreen(
     val colorGradingState by viewModel.colorGradingState.collectAsState()
     val renderFarmNode by viewModel.renderFarmNode.collectAsState()
     val renderFarmProgress by viewModel.renderFarmProgress.collectAsState()
+    val localExportState by viewModel.localExportState.collectAsState()
 
     // --- REAL NATIVE ANDROID STORAGE ACCESS FRAMEWORK (SAF) PICKERS ---
     val pdfPickerLauncher = rememberLauncherForActivityResult(
@@ -265,6 +266,7 @@ fun StudioScreen(
                             project = project,
                             renderFarmNode = renderFarmNode,
                             renderFarmProgress = renderFarmProgress,
+                            localExportState = localExportState,
                             onStartLocalExport = { preset -> viewModel.startMediaCodecExport(preset) },
                             onDispatchToRenderFarm = { viewModel.startRenderFarmJob() },
                             onCancelRender = { viewModel.cancelRenderFarmJob() },

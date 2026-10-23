@@ -62,7 +62,7 @@ data class AnimationNodeGraph(
                     id = "node_fx",
                     title = "Glow & Tone FX",
                     nodeType = AnimationNodeType.COLOR_FX,
-                    x = 460f,
+                    x = 720f,
                     y = 60f,
                     inputs = listOf(NodeSocket("in_image", "Input Image", false)),
                     outputs = listOf(NodeSocket("out_image", "Image", true)),
@@ -72,7 +72,7 @@ data class AnimationNodeGraph(
                     id = "node_transform",
                     title = "Kinematic Transform",
                     nodeType = AnimationNodeType.TRANSFORM,
-                    x = 460f,
+                    x = 720f,
                     y = 380f,
                     inputs = listOf(
                         NodeSocket("in_image", "Input Image", false),
@@ -85,7 +85,7 @@ data class AnimationNodeGraph(
                     id = "node_master_out",
                     title = "Master Composite",
                     nodeType = AnimationNodeType.COMPOSITE_OUTPUT,
-                    x = 860f,
+                    x = 1380f,
                     y = 220f,
                     inputs = listOf(NodeSocket("in_composite", "Final In", false)),
                     parameters = mapOf("quality" to "High 1080p", "fps" to "24")

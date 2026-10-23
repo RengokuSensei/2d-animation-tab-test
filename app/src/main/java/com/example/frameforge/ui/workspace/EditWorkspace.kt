@@ -1,7 +1,9 @@
 package com.example.frameforge.ui.workspace
 
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,13 +57,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.frameforge.cinema.TimelineClip
 import com.example.frameforge.cinema.TimelineClipType
+import com.example.frameforge.engine.DrawingEngine
+import com.example.frameforge.engine.RotoscopingEngine
 import com.example.frameforge.model.AnimationProject
 
 private val WorkspaceDarkBg = Color(0xFF0F1115)
@@ -124,10 +130,44 @@ fun EditWorkspace(
                             .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Frame ${currentFrame + 1} Preview (${project.canvasWidth}x${project.canvasHeight})",
-                            color = Color(0xFF64748B),
-                            fontSize = 12.sp
+                        val previewBitmap = remember(currentFrame, project.cels, project.layers, project.videoTrack) {
+                            val bmp = Bitmap.createBitmap(
+                                project.canvasWidth.coerceAtLeast(320),
+                                project.canvasHeight.coerceAtLeast(180),
+                                Bitmap.Config.ARGB_8888
+                            )
+                            val canvas = android.graphics.Canvas(bmp)
+                            canvas.drawColor(android.graphics.Color.DKGRAY)
+
+                            // 1. Draw video underlay if enabled
+                            if (project.videoTrack.isEnabled) {
+                                RotoscopingEngine.renderRotoscopingFrame(
+                                    canvas = canvas,
+                                    docWidth = project.canvasWidth,
+                                    docHeight = project.canvasHeight,
+                                    frameIndex = currentFrame,
+                                    track = project.videoTrack
+                                )
+                            }
+
+                            // 2. Draw committed animation cels for this frame
+                            val frameCels = project.cels.filter { it.frameIndex == currentFrame }
+                            val celsByLayer = frameCels.associateBy { it.layerId }
+                            for (layer in project.layers) {
+                                if (!layer.isVisible) continue
+                                val cel = celsByLayer[layer.id] ?: continue
+                                for (stroke in cel.strokes) {
+                                    DrawingEngine.renderStroke(canvas, stroke)
+                                }
+                            }
+                            bmp
+                        }
+
+                        Image(
+                            bitmap = previewBitmap.asImageBitmap(),
+                            contentDescription = "Active Monitor Frame",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
                         )
                     }
 

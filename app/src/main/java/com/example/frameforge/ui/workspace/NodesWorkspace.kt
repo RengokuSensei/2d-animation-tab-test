@@ -182,17 +182,18 @@ fun NodesWorkspace(
                         modifier = Modifier
                             .offset { IntOffset(nodeScreenX, nodeScreenY) }
                             .width(220.dp)
-                            .clickable { selectedNodeId = node.id }
                             .pointerInput(node.id) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    selectedNodeId = node.id
-                                    onUpdateNodePosition(
-                                        node.id,
-                                        node.x + dragAmount.x / zoom,
-                                        node.y + dragAmount.y / zoom
-                                    )
-                                }
+                                detectDragGestures(
+                                    onDragStart = { selectedNodeId = node.id },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        onUpdateNodePosition(
+                                            node.id,
+                                            node.x + dragAmount.x / zoom,
+                                            node.y + dragAmount.y / zoom
+                                        )
+                                    }
+                                )
                             }
                             .testTag("node_card_${node.id}")
                     ) {
@@ -368,6 +369,22 @@ fun NodesWorkspace(
                                     ),
                                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
                                 )
+                            }
+                            AnimationNodeType.LAYER_SOURCE -> {
+                                val opacity = activeNode.parameters["opacity"]?.toFloatOrNull() ?: 1.0f
+                                Text("Layer Opacity: ${(opacity * 100).toInt()}%", color = Color.White, fontSize = 11.sp)
+                                Slider(
+                                    value = opacity,
+                                    onValueChange = { onUpdateParameter(activeNode.id, "opacity", it.toString()) },
+                                    valueRange = 0f..1f,
+                                    colors = SliderDefaults.colors(thumbColor = Color(0xFF00E5FF), activeTrackColor = Color(0xFF00E5FF))
+                                )
+                                Text("Source: ${activeNode.parameters["layerName"] ?: "Drawing Cel Layer"}", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                            }
+                            AnimationNodeType.COMPOSITE_OUTPUT -> {
+                                Text("Output Resolution: ${activeNode.parameters["quality"] ?: "1080p Cinema"}", color = Color.White, fontSize = 11.sp)
+                                Text("Frame Rate: ${activeNode.parameters["fps"] ?: "24"} FPS", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                Text("Master Blend: Porter-Duff Over", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                             else -> {
                                 Text("No configurable properties for this node.", color = Color.Gray, fontSize = 11.sp)
