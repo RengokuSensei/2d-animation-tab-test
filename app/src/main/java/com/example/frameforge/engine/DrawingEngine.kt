@@ -388,7 +388,7 @@ object DrawingEngine {
 
             val distRatio = when (config.fadeMode) {
                 com.example.frameforge.model.OnionSkinFadeMode.LINEAR -> (config.prevFramesCount - offset + 1).toFloat() / config.prevFramesCount
-                com.example.frameforge.model.OnionSkinFadeMode.EXPONENTIAL -> kotlin.math.pow(0.5, offset.toDouble()).toFloat()
+                com.example.frameforge.model.OnionSkinFadeMode.EXPONENTIAL -> Math.pow(0.5, offset.toDouble()).toFloat()
                 com.example.frameforge.model.OnionSkinFadeMode.FLAT -> 1.0f
             }
             val alpha = (config.opacity * distRatio * 255).toInt().coerceIn(10, 255)
@@ -410,7 +410,7 @@ object DrawingEngine {
 
             val distRatio = when (config.fadeMode) {
                 com.example.frameforge.model.OnionSkinFadeMode.LINEAR -> (config.nextFramesCount - offset + 1).toFloat() / config.nextFramesCount
-                com.example.frameforge.model.OnionSkinFadeMode.EXPONENTIAL -> kotlin.math.pow(0.5, offset.toDouble()).toFloat()
+                com.example.frameforge.model.OnionSkinFadeMode.EXPONENTIAL -> Math.pow(0.5, offset.toDouble()).toFloat()
                 com.example.frameforge.model.OnionSkinFadeMode.FLAT -> 1.0f
             }
             val alpha = (config.opacity * distRatio * 255).toInt().coerceIn(10, 255)

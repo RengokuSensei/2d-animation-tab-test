@@ -124,6 +124,8 @@ fun StudioScreen(
     val isRotoscopingDialogOpen by viewModel.isRotoscopingDialogOpen.collectAsState()
     val rotoscopingState by viewModel.rotoscopingState.collectAsState()
 
+    val motionTrackingState by viewModel.motionTrackingState.collectAsState()
+
     val isCurveEditorDialogOpen by viewModel.isCurveEditorDialogOpen.collectAsState()
     val curveEditorState by viewModel.curveEditorState.collectAsState()
 
