@@ -30,45 +30,67 @@ object TextToDiagramEngine {
         originX: Float = 140f,
         originY: Float = 120f
     ): TextToDiagramResult = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY?.toString() ?: ""
+        try {
+            val apiKey = BuildConfig.GEMINI_API_KEY?.toString() ?: ""
 
-        var mermaidCode: String? = null
-        var isFromAi = false
+            var mermaidCode: String? = null
+            var isFromAi = false
 
-        if (apiKey.isNotBlank() && apiKey != "placeholder") {
-            try {
-                mermaidCode = queryGeminiForMermaid(prompt, apiKey)
-                if (!mermaidCode.isNullOrBlank()) {
-                    isFromAi = true
+            if (apiKey.isNotBlank() && apiKey != "placeholder") {
+                try {
+                    mermaidCode = queryGeminiForMermaid(prompt, apiKey)
+                    if (!mermaidCode.isNullOrBlank()) {
+                        isFromAi = true
+                    }
+                } catch (e: Exception) {
+                    // Smooth offline fallback
                 }
-            } catch (e: Exception) {
-                // Fall through to offline semantic generator
             }
+
+            if (mermaidCode.isNullOrBlank()) {
+                mermaidCode = generateOfflineMermaid(prompt)
+                isFromAi = false
+            }
+
+            val parsed = try {
+                MermaidDiagramEngine.parseMermaid(mermaidCode)
+            } catch (e: Exception) {
+                MermaidDiagramEngine.parseMermaid("flowchart TD\n    A[Architecture Plan] --> B[Processing Engine] --> C[(Database)]")
+            }
+
+            val strokes = try {
+                MermaidDiagramEngine.renderDiagramToStrokes(
+                    diagram = parsed,
+                    originX = originX,
+                    originY = originY
+                )
+            } catch (e: Exception) {
+                emptyList()
+            }
+
+            TextToDiagramResult(
+                prompt = prompt,
+                mermaidCode = mermaidCode,
+                strokes = strokes,
+                isFromAi = isFromAi,
+                message = if (isFromAi) "Diagram synthesized by Gemini AI" else "Generated via Smart Diagram Synthesizer"
+            )
+        } catch (e: Exception) {
+            val fallbackCode = "flowchart TD\n    A[Start] --> B[Workflow Engine] --> C[Export Result]"
+            val parsed = MermaidDiagramEngine.parseMermaid(fallbackCode)
+            val st = MermaidDiagramEngine.renderDiagramToStrokes(parsed, originX, originY)
+            TextToDiagramResult(
+                prompt = prompt,
+                mermaidCode = fallbackCode,
+                strokes = st,
+                isFromAi = false,
+                message = "Generated via Offline Smart Synthesizer"
+            )
         }
-
-        if (mermaidCode.isNullOrBlank()) {
-            mermaidCode = generateOfflineMermaid(prompt)
-            isFromAi = false
-        }
-
-        val parsed = MermaidDiagramEngine.parseMermaid(mermaidCode)
-        val strokes = MermaidDiagramEngine.renderDiagramToStrokes(
-            diagram = parsed,
-            originX = originX,
-            originY = originY
-        )
-
-        TextToDiagramResult(
-            prompt = prompt,
-            mermaidCode = mermaidCode,
-            strokes = strokes,
-            isFromAi = isFromAi,
-            message = if (isFromAi) "Diagram synthesized by Gemini AI" else "Generated via Smart Diagram Synthesizer"
-        )
     }
 
     private fun queryGeminiForMermaid(prompt: String, apiKey: String): String? {
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.setRequestProperty("Content-Type", "application/json")

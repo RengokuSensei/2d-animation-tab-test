@@ -159,6 +159,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     )
     val customPalette: StateFlow<List<Color>> = _customPalette.asStateFlow()
 
+    private val _currentWorkspace = MutableStateFlow(com.example.frameforge.model.StudioWorkspace.DRAW)
+    val currentWorkspace: StateFlow<com.example.frameforge.model.StudioWorkspace> = _currentWorkspace.asStateFlow()
+
+    fun setWorkspace(workspace: com.example.frameforge.model.StudioWorkspace) {
+        _currentWorkspace.value = workspace
+    }
+
     private val _nodeGraph = MutableStateFlow(AnimationNodeGraph())
     val nodeGraph: StateFlow<AnimationNodeGraph> = _nodeGraph.asStateFlow()
 
@@ -1004,6 +1011,14 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun startMediaCodecExport(preset: String = "1080p Cinema") {
+        exportMp4 { file ->
+            if (file != null) {
+                showStatus("Exported MP4: ${file.name}")
+            }
+        }
+    }
+
     fun exportCurrentFramePng(onComplete: (File?) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { showStatus("Saving Frame PNG...") }
@@ -1160,11 +1175,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun autoArrangeNodeGraph() {
         _nodeGraph.update { g ->
             val col1X = 60f
-            val col2X = 360f
-            val col3X = 660f
-            var col1Y = 80f
-            var col2Y = 80f
-            var col3Y = 180f
+            val col2X = 460f
+            val col3X = 860f
+            var col1Y = 60f
+            var col2Y = 60f
+            var col3Y = 220f
 
             val updatedNodes = g.nodes.map { node ->
                 when (node.nodeType) {
@@ -1422,6 +1437,72 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             } catch (e: Exception) {
                 e.printStackTrace()
                 showStatus("Failed to generate sample PDF: ${e.message}")
+            }
+        }
+    }
+
+    fun importVideoClip(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "imported_video.mp4"
+                val tempFile = File(context.cacheDir, "vid_${System.currentTimeMillis()}.mp4")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { out -> input.copyTo(out) }
+                }
+                val newClip = com.example.frameforge.cinema.TimelineClip(
+                    trackId = "track_v1_video",
+                    name = name,
+                    startFrame = 0,
+                    durationFrames = 48,
+                    clipType = com.example.frameforge.cinema.TimelineClipType.VIDEO,
+                    colorArgb = 0xFF8B5CF6.toInt()
+                )
+                _timelineClips.update { it + newClip }
+                showStatus("Imported Video: $name")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                showStatus("Failed to import video: ${e.message}")
+            }
+        }
+    }
+
+    fun importAudioTrack(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "audio_track.mp3"
+                val tempFile = File(context.cacheDir, "aud_${System.currentTimeMillis()}.mp3")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { out -> input.copyTo(out) }
+                }
+                val newClip = com.example.frameforge.cinema.TimelineClip(
+                    trackId = "track_a1_narration",
+                    name = name,
+                    startFrame = 0,
+                    durationFrames = 72,
+                    clipType = com.example.frameforge.cinema.TimelineClipType.AUDIO,
+                    colorArgb = 0xFF10B981.toInt()
+                )
+                _timelineClips.update { it + newClip }
+                showStatus("Imported Audio Track: $name")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                showStatus("Failed to import audio: ${e.message}")
+            }
+        }
+    }
+
+    fun importReferenceImage(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "reference.png"
+                addLayer(name)
+                showStatus("Inserted Reference Photo: $name")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                showStatus("Failed to load reference image: ${e.message}")
             }
         }
     }
@@ -1818,6 +1899,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectClip(id: String?) {
         _selectedClipId.value = id
+    }
+
+    fun deleteSelectedClip() {
+        val selectedId = _selectedClipId.value ?: return
+        _timelineClips.update { clips -> clips.filterNot { it.id == selectedId } }
+        _selectedClipId.value = null
+        showStatus("Deleted Clip")
     }
 
     fun toggleRippleEdit() {

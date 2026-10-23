@@ -768,5 +768,28 @@ class FrameForgeUnitTest {
         // At completion (frame 20) -> all 4 points
         assertEquals(4, animStroke.getVisiblePointsForFrame(20).size)
     }
+
+    @Test
+    fun testStudioWorkspaceEnumeration() {
+        val workspaces = com.example.frameforge.model.StudioWorkspace.values()
+        assertEquals(5, workspaces.size)
+        assertTrue(workspaces.contains(com.example.frameforge.model.StudioWorkspace.DRAW))
+        assertTrue(workspaces.contains(com.example.frameforge.model.StudioWorkspace.EDIT))
+        assertTrue(workspaces.contains(com.example.frameforge.model.StudioWorkspace.NODES))
+        assertTrue(workspaces.contains(com.example.frameforge.model.StudioWorkspace.COLOR))
+        assertTrue(workspaces.contains(com.example.frameforge.model.StudioWorkspace.DELIVER))
+    }
+
+    @Test
+    fun testNodeGraphProperSpacing() {
+        val graph = com.example.frameforge.model.AnimationNodeGraph()
+        val nodeSource = graph.nodes.find { it.id == "node_layer_src" }
+        val nodeFx = graph.nodes.find { it.id == "node_fx" }
+        assertNotNull(nodeSource)
+        assertNotNull(nodeFx)
+        // The horizontal gap between column 1 and column 2 should be at least 300 units to prevent overlap
+        val horizontalGap = nodeFx!!.x - nodeSource!!.x
+        assertTrue("Node columns must have adequate gap (>= 300px) to prevent card overlap", horizontalGap >= 300f)
+    }
 }
 
