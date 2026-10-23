@@ -47,8 +47,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.frameforge.model.AnimationLayer
 import com.example.frameforge.model.BlendModeType
-import com.example.frameforge.model.Layer
 
 // --- 1. STORYBOARD PAGES POPOVER ---
 @Composable
@@ -300,7 +300,7 @@ fun OnionSkinPopover(
 // --- 3. MULTI-LAYER POPOVER ---
 @Composable
 fun AetherLayersPopover(
-    layers: List<Layer>,
+    layers: List<AnimationLayer>,
     activeLayerId: String,
     onSelectLayer: (String) -> Unit,
     onToggleVisibility: (String) -> Unit,

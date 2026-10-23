@@ -22,12 +22,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.ChevronDown
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Timeline
@@ -163,7 +163,7 @@ fun AetherTopPills(
                         fontWeight = FontWeight.Medium
                     )
                     Icon(
-                        imageVector = Icons.Default.ChevronDown,
+                        imageVector = Icons.Default.KeyboardArrowDown,
                         contentDescription = "Expand",
                         tint = Color(0xFFA1A1AA),
                         modifier = Modifier.size(12.dp)

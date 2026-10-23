@@ -63,7 +63,7 @@ fun AetherStylusDock(
     ) {
         Column(
             modifier = Modifier.padding(6.dp),
-            horizontalAlignment = Alignment.CenterVertically,
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // --- 1. TOOL BUTTONS ---
@@ -120,7 +120,7 @@ fun AetherStylusDock(
             // 4 Mini Swatch Dots
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
-                horizontalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(vertical = 2.dp)
             ) {
                 quickSwatches.forEach { sw ->
@@ -145,7 +145,7 @@ fun AetherStylusDock(
 
             // --- 3. PROCREATE-STYLE VERTICAL BRUSH SIZE SLIDER ---
             Column(
-                horizontalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier.padding(vertical = 4.dp)
             ) {

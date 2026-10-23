@@ -680,22 +680,22 @@ fun AetherGradeOverlay(
                     )
                     GradeSlider(
                         label = "Saturation",
-                        value = state.saturation,
+                        value = state.cdl.saturation,
                         range = 0.0f..2.0f,
-                        onValueChange = { onStateChange(state.copy(saturation = it)) }
+                        onValueChange = { onStateChange(state.copy(cdl = state.cdl.copy(saturation = it))) }
                     )
                     GradeSlider(
                         label = "Kelvin Warmth",
-                        value = state.colorTemperature,
+                        value = state.whiteBalance.kelvin,
                         range = 2500f..9500f,
                         unit = "K",
-                        onValueChange = { onStateChange(state.copy(colorTemperature = it)) }
+                        onValueChange = { onStateChange(state.copy(whiteBalance = state.whiteBalance.copy(kelvin = it))) }
                     )
                     GradeSlider(
                         label = "Exposure Offset",
-                        value = state.exposure,
-                        range = -2.0f..2.0f,
-                        onValueChange = { onStateChange(state.copy(exposure = it)) }
+                        value = state.highlights,
+                        range = -1.0f..1.0f,
+                        onValueChange = { onStateChange(state.copy(highlights = it)) }
                     )
                 }
             }
@@ -709,7 +709,7 @@ private fun AetherColorWheel(label: String, tint: Color) {
     var puckY by remember { mutableFloatStateOf(0f) }
 
     Column(
-        horizontalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
