@@ -38,6 +38,11 @@ import com.example.frameforge.ui.popovers.LayersPopover
 import com.example.frameforge.ui.popovers.SelectionDock
 import com.example.frameforge.ui.popovers.TransformDock
 import com.example.frameforge.ui.popovers.CinematicVfxDialog
+import com.example.frameforge.ui.popovers.ColorGradingDialog
+import com.example.frameforge.ui.popovers.ChromaKeyDialog
+import com.example.frameforge.ui.popovers.RotoscopingStudioDialog
+import com.example.frameforge.ui.popovers.CurveEditorDopeSheetDialog
+import com.example.frameforge.ui.popovers.RenderFarmDialog
 import com.example.frameforge.ui.popovers.VelocityGraphDialog
 import com.example.frameforge.ui.popovers.MultiplaneStageDialog
 import com.example.frameforge.ui.popovers.SceneTransitionsDialog
@@ -110,6 +115,22 @@ fun StudioScreen(
     val isExportDialogOpen by viewModel.isExportDialogOpen.collectAsState()
     val isCanvasLocked by viewModel.isCanvasLocked.collectAsState()
 
+    val isColorGradingDialogOpen by viewModel.isColorGradingDialogOpen.collectAsState()
+    val colorGradingState by viewModel.colorGradingState.collectAsState()
+
+    val isChromaKeyDialogOpen by viewModel.isChromaKeyDialogOpen.collectAsState()
+    val chromaKeyState by viewModel.chromaKeyState.collectAsState()
+
+    val isRotoscopingDialogOpen by viewModel.isRotoscopingDialogOpen.collectAsState()
+    val rotoscopingState by viewModel.rotoscopingState.collectAsState()
+
+    val isCurveEditorDialogOpen by viewModel.isCurveEditorDialogOpen.collectAsState()
+    val curveEditorState by viewModel.curveEditorState.collectAsState()
+
+    val isRenderFarmDialogOpen by viewModel.isRenderFarmDialogOpen.collectAsState()
+    val renderFarmNode by viewModel.renderFarmNode.collectAsState()
+    val renderFarmProgress by viewModel.renderFarmProgress.collectAsState()
+
     val pdfPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -122,10 +143,17 @@ fun StudioScreen(
         isBrushStudioOpen || isLayersPopoverOpen || isColorPickerOpen || isExportDialogOpen ||
         transformState.isActive || selectionState.isActive || isNodeGraphViewActive || isPdfImportDialogOpen ||
         isExcalidrawModalOpen || isCinematicVfxDialogOpen || isVelocityGraphDialogOpen ||
-        isMultiplaneStageDialogOpen || isSceneTransitionsDialogOpen
+        isMultiplaneStageDialogOpen || isSceneTransitionsDialogOpen ||
+        isColorGradingDialogOpen || isChromaKeyDialogOpen || isRotoscopingDialogOpen ||
+        isCurveEditorDialogOpen || isRenderFarmDialogOpen
 
     BackHandler(enabled = hasModalOpen) {
         when {
+            isColorGradingDialogOpen -> viewModel.closeColorGradingDialog()
+            isChromaKeyDialogOpen -> viewModel.closeChromaKeyDialog()
+            isRotoscopingDialogOpen -> viewModel.closeRotoscopingDialog()
+            isCurveEditorDialogOpen -> viewModel.closeCurveEditorDialog()
+            isRenderFarmDialogOpen -> viewModel.closeRenderFarmDialog()
             isExportDialogOpen -> viewModel.toggleExportDialog()
             isCinematicVfxDialogOpen -> viewModel.closeCinematicVfxDialog()
             isVelocityGraphDialogOpen -> viewModel.closeVelocityGraphDialog()
@@ -185,6 +213,9 @@ fun StudioScreen(
                     cinematicVfxConfig = cinematicVfxConfig,
                     shiftAndTraceState = shiftAndTraceState,
                     autoAdvanceState = autoAdvanceState,
+                    rotoscopingState = rotoscopingState,
+                    motionTrackingState = motionTrackingState,
+                    colorGradingState = colorGradingState,
                     isReferenceCompanionOpen = isReferenceCompanionOpen,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
                     onUpdateStroke = { x, y, p -> viewModel.updateStroke(x, y, p) },
@@ -351,6 +382,11 @@ fun StudioScreen(
                     onToggleTimeStretch = { viewModel.toggleTimeStretch() },
                     isShiftAndTraceActive = shiftAndTraceState.isActive,
                     onToggleShiftAndTrace = { viewModel.toggleShiftAndTrace() },
+                    onOpenColorGrading = { viewModel.toggleColorGradingDialog() },
+                    onOpenChromaKey = { viewModel.toggleChromaKeyDialog() },
+                    onOpenRotoscoping = { viewModel.toggleRotoscopingDialog() },
+                    onOpenCurveEditor = { viewModel.toggleCurveEditorDialog() },
+                    onOpenRenderFarm = { viewModel.toggleRenderFarmDialog() },
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }
@@ -569,6 +605,55 @@ fun StudioScreen(
                     onExportCurrentFramePng = { cb -> viewModel.exportCurrentFramePng(cb) },
                     onExportPngSequence = { cb -> viewModel.exportPngSequence(cb) },
                     onDismiss = { viewModel.toggleExportDialog() }
+                )
+            }
+
+            // 6. Pro Color Grading Dialog (DaVinci Resolve / ASC CDL Wheels)
+            if (isColorGradingDialogOpen) {
+                ColorGradingDialog(
+                    state = colorGradingState,
+                    onStateChange = { viewModel.updateColorGradingState(it) },
+                    onDismiss = { viewModel.closeColorGradingDialog() }
+                )
+            }
+
+            // 7. Chroma Keying & Despill Dialog
+            if (isChromaKeyDialogOpen) {
+                ChromaKeyDialog(
+                    config = chromaKeyState,
+                    onConfigChange = { viewModel.updateChromaKeyState(it) },
+                    onDismiss = { viewModel.closeChromaKeyDialog() }
+                )
+            }
+
+            // 8. Rotoscoping Splines with Per-Vertex Feathering Dialog
+            if (isRotoscopingDialogOpen) {
+                RotoscopingStudioDialog(
+                    state = rotoscopingState,
+                    onStateChange = { viewModel.updateRotoscopingState(it) },
+                    currentFrame = currentFrame,
+                    onDismiss = { viewModel.closeRotoscopingDialog() }
+                )
+            }
+
+            // 9. Glaxnimate / Blender Graph Curve Editor & Dope Sheet
+            if (isCurveEditorDialogOpen) {
+                CurveEditorDopeSheetDialog(
+                    state = curveEditorState,
+                    currentFrame = currentFrame.toFloat(),
+                    totalFrames = project.totalFrames,
+                    onStateChange = { viewModel.updateCurveEditorState(it) },
+                    onDismiss = { viewModel.closeCurveEditorDialog() }
+                )
+            }
+
+            // 10. Distributed GPU Render Farm Dialog
+            if (isRenderFarmDialogOpen) {
+                RenderFarmDialog(
+                    node = renderFarmNode,
+                    progress = renderFarmProgress,
+                    onStartRender = { req -> viewModel.dispatchRenderFarmJob(req) },
+                    onDismiss = { viewModel.closeRenderFarmDialog() }
                 )
             }
         }

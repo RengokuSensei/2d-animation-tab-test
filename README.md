@@ -107,6 +107,37 @@ FrameForge is designed around the raw hardware capabilities of Android tablets:
 
 ---
 
+### 8. 🎨 DaVinci Resolve Pro Color Wheels & ASC CDL
+- **Three-Way Color Wheels**: Independent Lift (Shadows), Gamma (Midtones), Gain (Highlights), and Master Offset controls with per-channel RGB balance.
+- **ASC CDL Formula**: Exact implementation of $(In \times Slope + Offset)^{Power}$ with color saturation matrix.
+- **White Balance (Kelvin)**: Planckian blackbody algorithm converting 2500K (warm tungsten desk lamp) to 9500K (deep azure sky) with Green-Magenta tint axis.
+- **Film Emulation Presets**: One-tap Hollywood *Teal & Orange*, *Kodak Vision3 500T*, *Fuji Eterna Cinema*, *Bleach Bypass Silver*, *Film Noir B&W*, *Makoto Shinkai Anime*, and *UPSC Warm Study*.
+
+### 9. 🟩 Industry-Proven Chroma Keying & Matte Tools
+- **Studio Keying**: Green screen (`#00FF00`), Blue screen (`#0000FF`), and eyedropper color sampling.
+- **Color Similarity & Smoothstep Roll-off**: Prevents jagged aliased edges around hair, cloth, and fine details.
+- **Edge Despill Suppression**: Average, Max Adjacent, and Weighted algorithms suppress green spill on skin and props without color degradation.
+- **Contact Shadow Recovery**: Automatically recovers and preserves natural floor and prop contact shadows under keyed subjects.
+- **Diagnostic B&W Matte Mode**: Inspect the exact alpha silhouette channel in monochrome.
+
+### 10. ✂️ Natron / Silhouette FX Rotoscoping with Per-Vertex Feathering
+- **Dual Spline System**: Each vertex has an inner core anchor point $(x, y)$, Bezier curvature tangents, and an independent **feather vector** $(fx, fy)$.
+- **Variable Feathering**: Sharp hard footwear (0px feather) and fast-moving motion-blurred hands (35px feather) within the exact same mask shape!
+- **Whisker Vector Guides**: Interactive visual whisker lines connecting anchors to their feather handles.
+- **Shape Inversion & Keyframe Tweening**: Keyframe vertex positions over time with automatic Hermite smoothstep shape tweening.
+
+### 11. 📈 Glaxnimate / Blender Graph Curve Editor & Dope Sheet
+- **Dope Sheet Mode**: Multi-track horizontal keyframe diamond strip $\diamondsuit$ for instant timing, sliding, and stretch adjustments.
+- **Bezier Graph Editor**: Dual-coordinate spline graph with sub-frame precision.
+- **Tangent Handle Modes**: *Auto-Clamped* (prevents value overshoot), *Aligned* (smooth colinear), *Free* (broken tangents), and *Vector*.
+
+### 12. 🖥️ Distributed Headless GPU Render Farm (Laptop GTX 1650 Offload)
+- **Zero Tablet Thermal Throttling**: Offload heavy 4K 60fps renders from the tablet to your laptop/workstation.
+- **Python Render Daemon**: Dedicated workstation server (`scripts/frameforge_render_daemon.py`) using NVIDIA NVENC hardware acceleration (`h264_nvenc`).
+- **Real-Time Network Telemetry**: Streams live render progress, frame rate (FPS), and ETA directly back to your tablet screen.
+
+---
+
 ## 🛠️ Project Structure
 
 ```
@@ -117,18 +148,25 @@ FrameForge is designed around the raw hardware capabilities of Android tablets:
 │   ├── src/main/java/com/example/
 │   │   ├── MainActivity.kt         # Edge-to-edge Activity entry point
 │   │   └── frameforge/
-│   │       ├── cinema/             # 7 Cinema Systems (Transitions, NLE, Light Gizmo, 3D)
+│   │       ├── cinema/             # Color Wheels, Keying, Roto, Tracking, Curves, NLE, Light Gizmo
 │   │       ├── engine/             # 144Hz Drawing Engine, IK, Rotoscoping, Procedural
 │   │       ├── export/             # Streaming MP4 (MediaCodec) & GIF Encoders
 │   │       ├── model/              # Rigging, Timeline, Drawing & Vector Models
-│   │       ├── pdf/                # PDF Slide Importer & Annotator
+│   │       ├── network/            # Headless GPU Render Farm Client & Bridge
+│   │       ├── pdf/                # PDF Slide Importer & Animated Handwriting Reveal Engine
 │   │       ├── ui/                 # Full-Screen Procreate Canvas, TopBar, SliderHUD, Timeline
-│   │       │   └── popovers/       # Floating studio modals (Brush, Layers, Actions, VFX)
+│   │       │   └── popovers/       # Color Grading, Chroma Key, Roto, Curves, Render Farm, VFX
 │   │       └── viewmodel/          # StudioViewModel state orchestration
 │   ├── src/test/java/com/example/  # Comprehensive unit test suite (Robolectric & JUnit)
 │   └── build.gradle.kts            # Android Gradle Plugin 9.1 & Compose configuration
 └── gradle/
     └── libs.versions.toml          # Centralized version catalog
+```
+
+### Running the Headless Render Farm Daemon on Laptop:
+```bash
+# On your Linux laptop with NVIDIA GPU:
+python3 scripts/frameforge_render_daemon.py
 ```
 
 ---

@@ -6,13 +6,39 @@ enum class PlaybackMode(val label: String) {
     PING_PONG("Ping-Pong")
 }
 
+enum class OnionSkinTintMode(val label: String) {
+    CLASSIC_RED_GREEN("Classic Red/Green (Industry Cel Standard)"),
+    KRITA_RAINBOW("Krita Stepped Palette (Orange/Red vs Green/Blue)"),
+    MONOCHROME_INK("Monochrome Ink Wash (Graphite Gray)"),
+    BLUE_ORANGE("Blue / Orange High-Contrast (Photographic)")
+}
+
+enum class OnionSkinFadeMode(val label: String) {
+    LINEAR("Linear Dropoff"),
+    EXPONENTIAL("Exponential Curve (Heavy In-Betweens)"),
+    FLAT("Constant Opacity")
+}
+
 data class OnionSkinConfig(
     val enabled: Boolean = true,
-    val prevFramesCount: Int = 2,
-    val nextFramesCount: Int = 2,
+    val prevFramesCount: Int = 3,
+    val nextFramesCount: Int = 3,
     val prevTintArgb: Int = 0xFFFF5252.toInt(), // Coral red
     val nextTintArgb: Int = 0xFF4CAF50.toInt(), // Fresh green
-    val opacity: Float = 0.45f
+    val opacity: Float = 0.50f,
+    val tintMode: OnionSkinTintMode = OnionSkinTintMode.KRITA_RAINBOW,
+    val fadeMode: OnionSkinFadeMode = OnionSkinFadeMode.LINEAR,
+    val isolatePinnedLayersOnly: Boolean = false,
+    val prevPalette: List<Int> = listOf(
+        0xFFFF5252.toInt(), // Step 1: Bright Coral Red
+        0xFFFF9100.toInt(), // Step 2: Luminous Amber
+        0xFFFFEA00.toInt()  // Step 3: Golden Yellow
+    ),
+    val nextPalette: List<Int> = listOf(
+        0xFF00E676.toInt(), // Step 1: Bright Emerald Green
+        0xFF00B0FF.toInt(), // Step 2: Sky Azure Blue
+        0xFF651FFF.toInt()  // Step 3: Royal Purple
+    )
 )
 
 enum class EasingCurve(val label: String) {

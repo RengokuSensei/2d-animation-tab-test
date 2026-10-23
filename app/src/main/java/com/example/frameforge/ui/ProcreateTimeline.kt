@@ -111,6 +111,11 @@ fun ProcreateTimeline(
     onToggleTimeStretch: () -> Unit = {},
     isShiftAndTraceActive: Boolean = false,
     onToggleShiftAndTrace: () -> Unit = {},
+    onOpenColorGrading: () -> Unit = {},
+    onOpenChromaKey: () -> Unit = {},
+    onOpenRotoscoping: () -> Unit = {},
+    onOpenCurveEditor: () -> Unit = {},
+    onOpenRenderFarm: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val lazyListState = rememberLazyListState()
@@ -340,6 +345,76 @@ fun ProcreateTimeline(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Pro Color Grading Wheel Trigger
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenColorGrading() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("color_grade_button")
+                    ) {
+                        Text("🎨 Grade", color = Color(0xFFFFD700), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Chroma Keying Trigger
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenChromaKey() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("chroma_key_button")
+                    ) {
+                        Text("🟩 Key", color = Color(0xFF00FF66), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Rotoscoping Splines Trigger
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenRotoscoping() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("roto_spline_button")
+                    ) {
+                        Text("✂️ Roto", color = Color(0xFFFF5252), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Glaxnimate / Blender Curves Trigger
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onOpenCurveEditor() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("curves_editor_button")
+                    ) {
+                        Text("📈 Dope/Curves", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Headless GPU Render Farm Trigger
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF059669))
+                            .clickable { onOpenRenderFarm() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("render_farm_button")
+                    ) {
+                        Text("🖥️ GTX 1650 Farm", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.width(6.dp))

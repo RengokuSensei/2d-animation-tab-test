@@ -381,24 +381,47 @@ object DrawingEngine {
         val activeLayers = if (pinnedLayers.isNotEmpty()) pinnedLayers else layers.filter { it.isVisible && it.onionSkinEnabled }
         if (activeLayers.isEmpty()) return
 
-        // Previous frames (tinted coral red)
+        // Previous frames (Krita stepped palette / Coral red)
         for (offset in 1..config.prevFramesCount) {
             val prevIdx = currentFrame - offset
             if (prevIdx < 0) continue
-            val distRatio = (config.prevFramesCount - offset + 1).toFloat() / config.prevFramesCount
+
+            val distRatio = when (config.fadeMode) {
+                com.example.frameforge.model.OnionSkinFadeMode.LINEAR -> (config.prevFramesCount - offset + 1).toFloat() / config.prevFramesCount
+                com.example.frameforge.model.OnionSkinFadeMode.EXPONENTIAL -> kotlin.math.pow(0.5, offset.toDouble()).toFloat()
+                com.example.frameforge.model.OnionSkinFadeMode.FLAT -> 1.0f
+            }
             val alpha = (config.opacity * distRatio * 255).toInt().coerceIn(10, 255)
 
-            drawGhostFrame(canvas, width, height, prevIdx, activeLayers, cels, config.prevTintArgb, alpha, currentFrame, shiftAndTrace)
+            // Select color from palette or fall back to default
+            val tintColor = if (config.prevPalette.isNotEmpty()) {
+                config.prevPalette[(offset - 1) % config.prevPalette.size]
+            } else {
+                config.prevTintArgb
+            }
+
+            drawGhostFrame(canvas, width, height, prevIdx, activeLayers, cels, tintColor, alpha, currentFrame, shiftAndTrace)
         }
 
-        // Future frames (tinted green)
+        // Future frames (Krita stepped palette / Fresh green)
         for (offset in 1..config.nextFramesCount) {
             val nextIdx = currentFrame + offset
             if (nextIdx >= totalFrames) continue
-            val distRatio = (config.nextFramesCount - offset + 1).toFloat() / config.nextFramesCount
+
+            val distRatio = when (config.fadeMode) {
+                com.example.frameforge.model.OnionSkinFadeMode.LINEAR -> (config.nextFramesCount - offset + 1).toFloat() / config.nextFramesCount
+                com.example.frameforge.model.OnionSkinFadeMode.EXPONENTIAL -> kotlin.math.pow(0.5, offset.toDouble()).toFloat()
+                com.example.frameforge.model.OnionSkinFadeMode.FLAT -> 1.0f
+            }
             val alpha = (config.opacity * distRatio * 255).toInt().coerceIn(10, 255)
 
-            drawGhostFrame(canvas, width, height, nextIdx, activeLayers, cels, config.nextTintArgb, alpha, currentFrame, shiftAndTrace)
+            val tintColor = if (config.nextPalette.isNotEmpty()) {
+                config.nextPalette[(offset - 1) % config.nextPalette.size]
+            } else {
+                config.nextTintArgb
+            }
+
+            drawGhostFrame(canvas, width, height, nextIdx, activeLayers, cels, tintColor, alpha, currentFrame, shiftAndTrace)
         }
     }
 

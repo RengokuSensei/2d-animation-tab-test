@@ -654,5 +654,119 @@ class FrameForgeUnitTest {
         val strokes = com.example.frameforge.ai.MermaidDiagramEngine.renderDiagramToStrokes(parsed)
         assertTrue("Rendered strokes should not be empty", strokes.isNotEmpty())
     }
+
+    @Test
+    fun testColorGradingEngineAndPresets() {
+        // Kelvin to RGB test
+        val (warmR, warmG, warmB) = com.example.frameforge.cinema.ColorGradingEngine.kelvinToRgbMultipliers(3200f, 0f)
+        assertTrue("Warm 3200K should have red > blue", warmR > warmB)
+
+        val (coolR, coolG, coolB) = com.example.frameforge.cinema.ColorGradingEngine.kelvinToRgbMultipliers(8500f, 0f)
+        assertTrue("Cool 8500K should have blue > red", coolB > coolR)
+
+        // Presets
+        val tealOrange = com.example.frameforge.cinema.ColorGradingEngine.applyPreset(
+            com.example.frameforge.cinema.ColorGradingPreset.TEAL_AND_ORANGE
+        )
+        assertTrue(tealOrange.isEnabled)
+        assertTrue(tealOrange.liftGammaGain.gain.red > 0f)
+        assertTrue(tealOrange.liftGammaGain.lift.blue > 0f)
+
+        // ColorMatrix generation
+        val matrix = com.example.frameforge.cinema.ColorGradingEngine.buildColorMatrix(tealOrange)
+        assertNotNull(matrix)
+    }
+
+    @Test
+    fun testChromaKeyingAndDespill() {
+        // Create 100x100 pure green test bitmap
+        val bmp = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        canvas.drawColor(android.graphics.Color.GREEN)
+
+        val config = com.example.frameforge.cinema.ChromaKeyConfig(
+            isEnabled = true,
+            keyColorArgb = android.graphics.Color.GREEN,
+            similarity = 0.35f,
+            smoothness = 0.10f
+        )
+
+        val keyed = com.example.frameforge.cinema.KeyingEngine.processChromaKey(bmp, config)
+        val centerPixel = keyed.getPixel(50, 50)
+        val alpha = android.graphics.Color.alpha(centerPixel)
+        assertEquals("Pure green screen pixel should be keyed fully transparent (alpha 0)", 0, alpha)
+    }
+
+    @Test
+    fun testRotoscopingSplineAndPerVertexFeathering() {
+        val vertices = listOf(
+            com.example.frameforge.cinema.RotoVertex(x = 100f, y = 100f, featherOffsetX = 10f, featherOffsetY = 10f),
+            com.example.frameforge.cinema.RotoVertex(x = 200f, y = 100f, featherOffsetX = 20f, featherOffsetY = 0f),
+            com.example.frameforge.cinema.RotoVertex(x = 200f, y = 200f, featherOffsetX = 15f, featherOffsetY = 10f),
+            com.example.frameforge.cinema.RotoVertex(x = 100f, y = 200f, featherOffsetX = 5f, featherOffsetY = 5f)
+        )
+        val shape = com.example.frameforge.cinema.RotoShape(
+            name = "Test Mask",
+            keyframes = mapOf(0 to vertices)
+        )
+
+        val resolved = shape.getVerticesForFrame(0)
+        assertEquals(4, resolved.size)
+        assertEquals(110f, resolved[0].featherAbsX, 0.01f)
+
+        // Generate Matte
+        val matte = com.example.frameforge.cinema.RotoscopingSplineEngine.generateRotoMatte(
+            300, 300, listOf(shape), 0
+        )
+        assertNotNull(matte)
+        assertEquals(300, matte.width)
+    }
+
+    @Test
+    fun testCurveEditorBezierInterpolation() {
+        val track = com.example.frameforge.cinema.AnimatedPropertyTrack(
+            name = "Test Property",
+            minValue = 0f,
+            maxValue = 100f,
+            keyframes = listOf(
+                com.example.frameforge.cinema.GraphKeyframe(frame = 0f, value = 0f),
+                com.example.frameforge.cinema.GraphKeyframe(frame = 10f, value = 100f)
+            )
+        )
+
+        assertEquals(0f, track.evaluate(0f), 0.01f)
+        assertEquals(100f, track.evaluate(10f), 0.01f)
+        val mid = track.evaluate(5f)
+        assertTrue("Midpoint value should be around 50", mid in 40f..60f)
+    }
+
+    @Test
+    fun testAnimatedHandwritingStrokeProgression() {
+        val stroke = com.example.frameforge.model.DrawingStroke(
+            points = listOf(
+                com.example.frameforge.model.StrokePoint(0f, 0f),
+                com.example.frameforge.model.StrokePoint(10f, 10f),
+                com.example.frameforge.model.StrokePoint(20f, 20f),
+                com.example.frameforge.model.StrokePoint(30f, 30f)
+            ),
+            colorArgb = android.graphics.Color.BLACK,
+            toolType = com.example.frameforge.model.ToolType.PEN,
+            size = 4f
+        )
+        val animStroke = com.example.frameforge.pdf.AnimatedStroke(
+            pageIndex = 0,
+            startFrame = 10,
+            durationFrames = 10,
+            stroke = stroke,
+            isRevealAnimated = true
+        )
+
+        // Before start frame -> 0 points
+        assertTrue(animStroke.getVisiblePointsForFrame(5).isEmpty())
+        // At halfway (frame 15) -> 2 points
+        assertEquals(2, animStroke.getVisiblePointsForFrame(15).size)
+        // At completion (frame 20) -> all 4 points
+        assertEquals(4, animStroke.getVisiblePointsForFrame(20).size)
+    }
 }
 

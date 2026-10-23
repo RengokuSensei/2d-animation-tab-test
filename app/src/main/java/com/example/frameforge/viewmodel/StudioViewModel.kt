@@ -82,6 +82,20 @@ import com.example.frameforge.cinema.TimelineClipType
 import com.example.frameforge.cinema.VelocityCurveState
 import com.example.frameforge.cinema.VirtualCamera3D
 import com.example.frameforge.cinema.CubicBezierCurve
+import com.example.frameforge.cinema.ColorGradingEngine
+import com.example.frameforge.cinema.ColorGradingPreset
+import com.example.frameforge.cinema.ColorGradingState
+import com.example.frameforge.cinema.ChromaKeyConfig
+import com.example.frameforge.cinema.ChromaKeyType
+import com.example.frameforge.cinema.RotoscopingState
+import com.example.frameforge.cinema.RotoShape
+import com.example.frameforge.cinema.MotionTrackingState
+import com.example.frameforge.cinema.CurveEditorState
+import com.example.frameforge.network.RenderFarmBridge
+import com.example.frameforge.network.RenderFarmNode
+import com.example.frameforge.network.RenderJobRequest
+import com.example.frameforge.network.RenderProgressUpdate
+import com.example.frameforge.network.RenderJobState
 import androidx.compose.ui.geometry.Offset
 
 enum class SidePanelType {
@@ -278,6 +292,48 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _shiftAndTraceState = MutableStateFlow(ShiftAndTraceState())
     val shiftAndTraceState: StateFlow<ShiftAndTraceState> = _shiftAndTraceState.asStateFlow()
+
+    // Pro Color Grading State
+    private val _colorGradingState = MutableStateFlow(ColorGradingState())
+    val colorGradingState: StateFlow<ColorGradingState> = _colorGradingState.asStateFlow()
+
+    private val _isColorGradingDialogOpen = MutableStateFlow(false)
+    val isColorGradingDialogOpen: StateFlow<Boolean> = _isColorGradingDialogOpen.asStateFlow()
+
+    // Chroma Keying & Matte Tools State
+    private val _chromaKeyState = MutableStateFlow(ChromaKeyConfig())
+    val chromaKeyState: StateFlow<ChromaKeyConfig> = _chromaKeyState.asStateFlow()
+
+    private val _isChromaKeyDialogOpen = MutableStateFlow(false)
+    val isChromaKeyDialogOpen: StateFlow<Boolean> = _isChromaKeyDialogOpen.asStateFlow()
+
+    // Rotoscoping & Per-Vertex Feathering State
+    private val _rotoscopingState = MutableStateFlow(RotoscopingState())
+    val rotoscopingState: StateFlow<RotoscopingState> = _rotoscopingState.asStateFlow()
+
+    private val _isRotoscopingDialogOpen = MutableStateFlow(false)
+    val isRotoscopingDialogOpen: StateFlow<Boolean> = _isRotoscopingDialogOpen.asStateFlow()
+
+    // 2D Motion Tracking State
+    private val _motionTrackingState = MutableStateFlow(MotionTrackingState())
+    val motionTrackingState: StateFlow<MotionTrackingState> = _motionTrackingState.asStateFlow()
+
+    // Curve Editor & Dope Sheet State
+    private val _curveEditorState = MutableStateFlow(CurveEditorState())
+    val curveEditorState: StateFlow<CurveEditorState> = _curveEditorState.asStateFlow()
+
+    private val _isCurveEditorDialogOpen = MutableStateFlow(false)
+    val isCurveEditorDialogOpen: StateFlow<Boolean> = _isCurveEditorDialogOpen.asStateFlow()
+
+    // Headless GPU Render Farm State
+    private val _renderFarmNode = MutableStateFlow(RenderFarmNode())
+    val renderFarmNode: StateFlow<RenderFarmNode> = _renderFarmNode.asStateFlow()
+
+    private val _renderFarmProgress = MutableStateFlow(RenderProgressUpdate())
+    val renderFarmProgress: StateFlow<RenderProgressUpdate> = _renderFarmProgress.asStateFlow()
+
+    private val _isRenderFarmDialogOpen = MutableStateFlow(false)
+    val isRenderFarmDialogOpen: StateFlow<Boolean> = _isRenderFarmDialogOpen.asStateFlow()
 
     private val _timelineClips = MutableStateFlow<List<TimelineClip>>(createInitialTimelineClips())
     val timelineClips: StateFlow<List<TimelineClip>> = _timelineClips.asStateFlow()
@@ -1943,6 +1999,73 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun applyPsychovisualTransition(config: PsychovisualTransitionConfig) {
         _psychovisualTransitionConfig.value = config
         showStatus("Applied ${config.type.title} (${config.durationFrames}f)")
+    }
+
+    // --- PRO COLOR GRADING ---
+    fun updateColorGradingState(state: ColorGradingState) {
+        _colorGradingState.value = state
+    }
+    fun toggleColorGradingDialog() {
+        _isColorGradingDialogOpen.update { !it }
+    }
+    fun closeColorGradingDialog() {
+        _isColorGradingDialogOpen.value = false
+    }
+
+    // --- CHROMA KEY & MATTE TOOLS ---
+    fun updateChromaKeyState(config: ChromaKeyConfig) {
+        _chromaKeyState.value = config
+    }
+    fun toggleChromaKeyDialog() {
+        _isChromaKeyDialogOpen.update { !it }
+    }
+    fun closeChromaKeyDialog() {
+        _isChromaKeyDialogOpen.value = false
+    }
+
+    // --- ROTOSCOPING & PER-VERTEX FEATHERING ---
+    fun updateRotoscopingState(state: RotoscopingState) {
+        _rotoscopingState.value = state
+    }
+    fun toggleRotoscopingDialog() {
+        _isRotoscopingDialogOpen.update { !it }
+    }
+    fun closeRotoscopingDialog() {
+        _isRotoscopingDialogOpen.value = false
+    }
+
+    // --- 2D MOTION TRACKING ---
+    fun updateMotionTrackingState(state: MotionTrackingState) {
+        _motionTrackingState.value = state
+    }
+
+    // --- CURVE EDITOR & DOPE SHEET ---
+    fun updateCurveEditorState(state: CurveEditorState) {
+        _curveEditorState.value = state
+    }
+    fun toggleCurveEditorDialog() {
+        val next = !_isCurveEditorDialogOpen.value
+        _isCurveEditorDialogOpen.value = next
+        _curveEditorState.update { it.copy(isVisible = next) }
+    }
+    fun closeCurveEditorDialog() {
+        _isCurveEditorDialogOpen.value = false
+        _curveEditorState.update { it.copy(isVisible = false) }
+    }
+
+    // --- DISTRIBUTED GPU RENDER FARM ---
+    fun toggleRenderFarmDialog() {
+        _isRenderFarmDialogOpen.update { !it }
+    }
+    fun closeRenderFarmDialog() {
+        _isRenderFarmDialogOpen.value = false
+    }
+    fun dispatchRenderFarmJob(request: RenderJobRequest) {
+        viewModelScope.launch {
+            RenderFarmBridge.dispatchRenderJob(_renderFarmNode.value, request).collect { progress ->
+                _renderFarmProgress.value = progress
+            }
+        }
     }
 }
 

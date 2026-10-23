@@ -94,6 +94,9 @@ fun StudioCanvas(
     cinematicVfxConfig: com.example.frameforge.cinema.CinematicVfxConfig = com.example.frameforge.cinema.CinematicVfxConfig(),
     shiftAndTraceState: com.example.frameforge.cinema.ShiftAndTraceState = com.example.frameforge.cinema.ShiftAndTraceState(),
     autoAdvanceState: com.example.frameforge.cinema.AutoAdvanceState = com.example.frameforge.cinema.AutoAdvanceState(),
+    rotoscopingState: com.example.frameforge.cinema.RotoscopingState = com.example.frameforge.cinema.RotoscopingState(),
+    motionTrackingState: com.example.frameforge.cinema.MotionTrackingState = com.example.frameforge.cinema.MotionTrackingState(),
+    colorGradingState: com.example.frameforge.cinema.ColorGradingState = com.example.frameforge.cinema.ColorGradingState(),
     isReferenceCompanionOpen: Boolean = false,
     onStartStroke: (Float, Float, Float) -> Unit,
     onUpdateStroke: (Float, Float, Float) -> Unit,
@@ -493,6 +496,31 @@ fun StudioCanvas(
                         height = project.canvasHeight.toFloat(),
                         letterbox = cinematicVfxConfig.letterbox
                     )
+                }
+
+                // 13. Draw Rotoscoping Splines & Per-Vertex Feather Guides
+                if (rotoscopingState.isEnabled && rotoscopingState.showGuideSplines) {
+                    for (shape in rotoscopingState.shapes) {
+                        val vertices = shape.getVerticesForFrame(currentFrame)
+                        com.example.frameforge.cinema.RotoscopingSplineEngine.renderRotoGuides(
+                            canvas = nativeCanvas,
+                            shape = shape,
+                            vertices = vertices,
+                            selectedVertexIndex = rotoscopingState.selectedVertexIndex,
+                            isFeatherToolActive = rotoscopingState.isFeatherToolActive
+                        )
+                    }
+                }
+
+                // 14. Draw 2D Motion Tracking HUD
+                if (motionTrackingState.isEnabled) {
+                    for (tracker in motionTrackingState.trackers) {
+                        com.example.frameforge.cinema.MotionTrackingEngine.renderTrackerHud(
+                            canvas = nativeCanvas,
+                            tracker = tracker,
+                            currentFrame = currentFrame
+                        )
+                    }
                 }
 
                 nativeCanvas.restore()
