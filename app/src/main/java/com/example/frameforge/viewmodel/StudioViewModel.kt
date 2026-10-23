@@ -2155,6 +2155,25 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    fun startRenderFarmJob() {
+        val proj = _project.value
+        dispatchRenderFarmJob(
+            RenderJobRequest(
+                projectId = proj.id,
+                projectName = proj.name,
+                targetWidth = proj.canvasWidth,
+                targetHeight = proj.canvasHeight,
+                targetFps = proj.fps,
+                startFrame = 0,
+                endFrame = proj.totalFrames
+            )
+        )
+    }
+
+    fun cancelRenderFarmJob() {
+        _renderFarmProgress.value = RenderProgressUpdate(state = RenderJobState.IDLE)
+    }
 }
 
 

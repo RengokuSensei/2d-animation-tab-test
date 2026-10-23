@@ -244,11 +244,11 @@ fun ColorWorkspace(
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Contrast: ${"%.2f".format(state.toneCurve.contrast)}", color = Color.White, fontSize = 11.sp)
+                        Text("Contrast: ${"%.2f".format(state.contrast)}", color = Color.White, fontSize = 11.sp)
                         Slider(
-                            value = state.toneCurve.contrast,
+                            value = state.contrast,
                             onValueChange = { c ->
-                                onStateChange(state.copy(toneCurve = state.toneCurve.copy(contrast = c)))
+                                onStateChange(state.copy(contrast = c))
                             },
                             valueRange = 0.5f..2.0f
                         )

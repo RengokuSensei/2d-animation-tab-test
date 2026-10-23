@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.frameforge.model.AnimationProject
+import com.example.frameforge.model.DrawingStroke
 import com.example.frameforge.model.OnionSkinConfig
 import com.example.frameforge.model.ToolType
 import com.example.frameforge.ui.StudioCanvas
@@ -73,6 +74,9 @@ fun DrawWorkspace(
     brushSmoothing: Float,
     isPlaying: Boolean,
     onionSkinConfig: OnionSkinConfig,
+    currentStroke: DrawingStroke? = null,
+    selectedBoneId: String? = null,
+    isIkMode: Boolean = false,
     onSetTool: (ToolType) -> Unit,
     onSetBrushSize: (Float) -> Unit,
     onSetBrushOpacity: (Float) -> Unit,
@@ -82,6 +86,11 @@ fun DrawWorkspace(
     onDeleteFrame: () -> Unit,
     onTogglePlay: () -> Unit,
     onToggleOnionSkin: () -> Unit,
+    onStartStroke: (Float, Float, Float) -> Unit = { _, _, _ -> },
+    onUpdateStroke: (Float, Float, Float) -> Unit = { _, _, _ -> },
+    onFinishStroke: () -> Unit = {},
+    onSelectBone: (String?) -> Unit = {},
+    onSolveIk: (Float, Float) -> Unit = { _, _ -> },
     onOpenBrushStudio: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -91,14 +100,15 @@ fun DrawWorkspace(
             project = project,
             currentFrame = currentFrame,
             currentTool = currentTool,
-            brushColor = brushColor,
-            brushSize = brushSize,
-            brushOpacity = brushOpacity,
-            brushSmoothing = brushSmoothing,
+            currentStroke = currentStroke,
             onionSkinConfig = onionSkinConfig,
-            selectedBoneId = null,
-            isIkMode = false,
-            currentStroke = null,
+            selectedBoneId = selectedBoneId,
+            isIkMode = isIkMode,
+            onStartStroke = onStartStroke,
+            onUpdateStroke = onUpdateStroke,
+            onFinishStroke = onFinishStroke,
+            onSelectBone = onSelectBone,
+            onSolveIk = onSolveIk,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -116,7 +126,7 @@ fun DrawWorkspace(
         ) {
             Column(
                 modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
-                horizontalAlignment = Alignment.CenterCenter,
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Pen / Brush Toggle
@@ -243,13 +253,13 @@ fun DrawWorkspace(
 
                     Column {
                         Text(
-                            text = "Frame ${currentFrame + 1} / ${project.frameCount.coerceAtLeast(1)}",
+                            text = "Frame ${currentFrame + 1} / ${project.totalFrames.coerceAtLeast(1)}",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${project.fps} FPS · ${project.width}x${project.height}",
+                            text = "${project.fps} FPS · ${project.canvasWidth}x${project.canvasHeight}",
                             color = Color(0xFF94A3B8),
                             fontSize = 10.sp
                         )
@@ -265,9 +275,9 @@ fun DrawWorkspace(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    for (i in 0 until project.frameCount) {
+                    for (i in 0 until project.totalFrames) {
                         val isCurrent = i == currentFrame
-                        val strokesInFrame = project.layers.sumOf { it.frames[i]?.strokes?.size ?: 0 }
+                        val strokesInFrame = project.cels.filter { it.frameIndex == i }.sumOf { it.strokes.size }
 
                         Box(
                             modifier = Modifier
@@ -283,7 +293,7 @@ fun DrawWorkspace(
                                 .padding(4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterCenter) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = "${i + 1}",
                                     color = Color.White,
@@ -312,7 +322,7 @@ fun DrawWorkspace(
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (onionSkinConfig.isEnabled) Color(0x3310B981) else Color(0x22FFFFFF))
+                            .background(if (onionSkinConfig.enabled) Color(0x3310B981) else Color(0x22FFFFFF))
                             .clickable { onToggleOnionSkin() }
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -321,12 +331,12 @@ fun DrawWorkspace(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (onionSkinConfig.isEnabled) Color(0xFF10B981) else Color.Gray)
+                                .background(if (onionSkinConfig.enabled) Color(0xFF10B981) else Color.Gray)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (onionSkinConfig.isEnabled) "Onion ON" else "Onion OFF",
-                            color = if (onionSkinConfig.isEnabled) Color(0xFF10B981) else Color.LightGray,
+                            text = if (onionSkinConfig.enabled) "Onion ON" else "Onion OFF",
+                            color = if (onionSkinConfig.enabled) Color(0xFF10B981) else Color.LightGray,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )

@@ -125,7 +125,7 @@ fun EditWorkspace(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Frame ${currentFrame + 1} Preview (${project.width}x${project.height})",
+                            text = "Frame ${currentFrame + 1} Preview (${project.canvasWidth}x${project.canvasHeight})",
                             color = Color(0xFF64748B),
                             fontSize = 12.sp
                         )
@@ -173,7 +173,7 @@ fun EditWorkspace(
                         }
 
                         IconButton(
-                            onClick = { onSelectFrame((currentFrame + 1).coerceAtMost(project.frameCount - 1)) },
+                            onClick = { onSelectFrame((currentFrame + 1).coerceAtMost(project.totalFrames - 1)) },
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(Icons.Default.FastForward, contentDescription = "Step Forward", tint = Color.LightGray, modifier = Modifier.size(16.dp))

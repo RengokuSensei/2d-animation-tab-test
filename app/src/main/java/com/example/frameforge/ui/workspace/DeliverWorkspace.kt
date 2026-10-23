@@ -52,7 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.frameforge.model.AnimationProject
 import com.example.frameforge.network.RenderFarmNode
-import com.example.frameforge.network.RenderProgress
+import com.example.frameforge.network.RenderJobState
+import com.example.frameforge.network.RenderProgressUpdate
 
 private val WorkspaceDarkBg = Color(0xFF0F1115)
 private val PanelBg = Color(0xFF16181F)
@@ -64,7 +65,7 @@ private val ProcreateBlue = Color(0xFF0A84FF)
 fun DeliverWorkspace(
     project: AnimationProject,
     renderFarmNode: RenderFarmNode,
-    renderFarmProgress: RenderProgress,
+    renderFarmProgress: RenderProgressUpdate,
     onStartLocalExport: (String) -> Unit,
     onDispatchToRenderFarm: () -> Unit,
     onCancelRender: () -> Unit = {},
@@ -115,10 +116,10 @@ fun DeliverWorkspace(
                     ) {
                         Column {
                             Text(project.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("${project.width}x${project.height} · ${project.fps} FPS · ${project.frameCount} frames", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                            Text("${project.canvasWidth}x${project.canvasHeight} · ${project.fps} FPS · ${project.totalFrames} frames", color = Color(0xFF94A3B8), fontSize = 11.sp)
                         }
 
-                        val durationSec = project.frameCount.toFloat() / project.fps
+                        val durationSec = project.totalFrames.toFloat() / project.fps
                         Text("${"%.1f".format(durationSec)}s", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
@@ -232,7 +233,8 @@ fun DeliverWorkspace(
                     .padding(18.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (renderFarmProgress.isRendering) {
+                val isRendering = renderFarmProgress.state == RenderJobState.RENDERING || renderFarmProgress.state == RenderJobState.UPLOADING
+                if (isRendering) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -252,7 +254,7 @@ fun DeliverWorkspace(
                         )
 
                         Text(
-                            text = "${renderFarmProgress.progressPercentage.toInt()}% Completed · ${"%.1f".format(renderFarmProgress.fps)} FPS",
+                            text = "${renderFarmProgress.progressPercentage.toInt()}% Completed · ${"%.1f".format(renderFarmProgress.currentFps)} FPS",
                             color = EmeraldGreen,
                             fontSize = 12.sp
                         )

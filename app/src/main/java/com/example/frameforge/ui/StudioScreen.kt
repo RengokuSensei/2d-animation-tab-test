@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -68,6 +69,9 @@ fun StudioScreen(
     val customPalette by viewModel.customPalette.collectAsState()
     val nodeGraph by viewModel.nodeGraph.collectAsState()
     val currentWorkspace by viewModel.currentWorkspace.collectAsState()
+    val currentStroke by viewModel.currentStroke.collectAsState()
+    val selectedBoneId by viewModel.selectedBoneId.collectAsState()
+    val isIkMode by viewModel.isIkMode.collectAsState()
 
     // Overlay dialog states
     val isBrushStudioOpen by viewModel.isBrushStudioOpen.collectAsState()
@@ -188,15 +192,23 @@ fun StudioScreen(
                             brushSmoothing = brushSmoothing,
                             isPlaying = isPlaying,
                             onionSkinConfig = onionSkinConfig,
+                            currentStroke = currentStroke,
+                            selectedBoneId = selectedBoneId,
+                            isIkMode = isIkMode,
                             onSetTool = { viewModel.setTool(it) },
                             onSetBrushSize = { viewModel.setBrushSize(it) },
                             onSetBrushOpacity = { viewModel.setBrushOpacity(it) },
-                            onSelectFrame = { viewModel.selectFrame(it) },
+                            onSelectFrame = { viewModel.setCurrentFrame(it) },
                             onAddFrame = { viewModel.addFrame() },
-                            onDuplicateFrame = { viewModel.duplicateFrame(currentFrame) },
-                            onDeleteFrame = { viewModel.deleteFrame(currentFrame) },
-                            onTogglePlay = { viewModel.togglePlay() },
+                            onDuplicateFrame = { viewModel.duplicateCurrentFrame() },
+                            onDeleteFrame = { viewModel.deleteCurrentFrame() },
+                            onTogglePlay = { viewModel.togglePlayback() },
                             onToggleOnionSkin = { viewModel.toggleOnionSkin() },
+                            onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
+                            onUpdateStroke = { x, y, p -> viewModel.updateStroke(x, y, p) },
+                            onFinishStroke = { viewModel.finishStroke() },
+                            onSelectBone = { viewModel.setSelectedBone(it) },
+                            onSolveIk = { x, y -> viewModel.solveIkForLimb(x, y) },
                             onOpenBrushStudio = { viewModel.toggleBrushStudio() },
                             modifier = Modifier.fillMaxSize()
                         )
@@ -211,8 +223,8 @@ fun StudioScreen(
                             selectedClipId = selectedClipId,
                             isRippleEditActive = isRippleEditActive,
                             isMagneticSnappingActive = isMagneticSnappingActive,
-                            onSelectFrame = { viewModel.selectFrame(it) },
-                            onTogglePlay = { viewModel.togglePlay() },
+                            onSelectFrame = { viewModel.setCurrentFrame(it) },
+                            onTogglePlay = { viewModel.togglePlayback() },
                             onSelectClip = { viewModel.selectClip(it) },
                             onSplitClip = { viewModel.splitClipAtPlayhead() },
                             onDeleteClip = { viewModel.deleteSelectedClip() },
@@ -280,8 +292,13 @@ fun StudioScreen(
                         onSelectLayer = { viewModel.setActiveLayer(it) },
                         onAddLayer = { viewModel.addLayer(it) },
                         onDeleteLayer = { viewModel.deleteLayer(it) },
+                        onDuplicateLayer = { viewModel.duplicateLayer(it) },
+                        onMergeLayerDown = { viewModel.mergeLayerDown(it) },
                         onToggleVisibility = { viewModel.toggleLayerVisibility(it) },
+                        onToggleLock = { viewModel.toggleLayerLock(it) },
                         onSetOpacity = { id, op -> viewModel.setLayerOpacity(id, op) },
+                        onSetBlendMode = { id, bm -> viewModel.setLayerBlendMode(id, bm) },
+                        onToggleOnionSkinPin = { viewModel.toggleLayerOnionSkinPin(it) },
                         onClose = { viewModel.toggleLayersPopover() },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -292,9 +309,12 @@ fun StudioScreen(
                 if (isColorPickerOpen) {
                     ColorPickerPopover(
                         currentColor = brushColor,
-                        onColorSelected = { viewModel.setBrushColor(it) },
+                        activeTab = colorPickerTab,
                         recentColors = recentColors,
                         customPalette = customPalette,
+                        onSelectTab = { viewModel.setColorPickerTab(it) },
+                        onColorSelected = { viewModel.selectColor(it) },
+                        onAddToPalette = { viewModel.addColorToCustomPalette(it) },
                         onClose = { viewModel.toggleColorPicker() },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -322,7 +342,7 @@ fun StudioScreen(
                 }
 
                 // --- 4. FLOATING STATUS TOAST BAR ---
-                AnimatedVisibility(
+                androidx.compose.animation.AnimatedVisibility(
                     visible = statusMessage != null,
                     enter = fadeIn(),
                     exit = fadeOut(),
