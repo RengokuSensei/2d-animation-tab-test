@@ -99,7 +99,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.3.0"
+          TAG="v1.4.0"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release $TAG exists. Updating APK asset..."
@@ -107,8 +107,8 @@ jobs:
           else
             echo "Creating Release $TAG with APK..."
             gh release create "$TAG" "$APK" \
-              --title "FrameForge v1.3.0 - Hybrid Rust Core & Tablet Bugfixes" \
-              --notes $'### ⚡ FrameForge v1.3.0 — Hybrid Rust Engine & Tablet Overhaul\n\n- 🦀 **Native Rust Engine (`libframeforge.so`)**: Compiled for ARM64 (Snapdragon 8s Gen 3) & x86_64, featuring SIMD ASC CDL grading and Catmull-Rom spline path smoothing.\n- ✏️ **DRAW Workspace Fix**: Eliminated 250% stylus coordinate translation offset on high-DPI displays.\n- ✂️ **EDIT Workspace Fix**: Live compositing video monitor displaying frame cels and video track frames.\n- 🕸️ **NODES Workspace Fix**: Touch dragging unblocked, auto-spaced columns (60dp, 720dp, 1380dp) prevent card overlapping, and full inspector controls for `LAYER_SOURCE` & `COMPOSITE_OUTPUT`.\n- 🚀 **DELIVER Workspace Fix**: Real-time per-frame export progress gauge, automated export to tablet Gallery (`Movies/FrameForge`), plus immediate Play & Share buttons.\n\nDownload `app-debug.apk` below to install directly on your tablet.' \
+              --title "FrameForge v1.4.0 - Aether Minimal Tablet Studio UI/UX Overhaul" \
+              --notes $'### 🎨 FrameForge v1.4.0 — Aether Minimal Tablet Studio Overhaul (Adopted 1:1 from jjk.html)\n\n- 🖼️ **Stage-First Artboard**: Full 16:9 centered canvas frame with ambient stage gradient and optional illustrated meadow backdrop.\n- ⚡ **Auto-Compact Stylus Motion**: All floating UI pills and docks smoothly slide out when drawing with the stylus and restore upon lift.\n- 🧘 **Distraction-Free Zen Mode**: Complete fullscreen drawing mode with floating `[Show UI]` restore pill.\n- 🏝️ **Floating Glassmorphic Chrome**: Top islands (Project & Storyboard Pages, Mode Switcher, Quick Actions), Left Micro Stylus Dock (Ink Pen, Pencil, Marker, Eraser, Fill Wash, Swatches, vertical slider), Bottom Timeline Scrubber (40dp diamond strip with expandable NLE drawer).\n- 🎛️ **Studio Mode Overlays**: Interactive Node Compositor DAG, Velocity Bezier Curve Editor with motion preview orb, Live 3-Way Color Grading wheels, and 3D Multiplane Depth Stage.\n- 🦀 **Rust Core Powered**: libframeforge.so bundled with SIMD acceleration.\n- 🚀 **One-Click Gallery Export**: Real-time progress bar saving directly to `Movies/FrameForge` with instant Play and Share intents.\n\nDownload `app-debug.apk` below to install directly on your Android tablet.' \
               --repo "${{ github.repository }}"
           fi
 

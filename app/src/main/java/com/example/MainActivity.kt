@@ -8,7 +8,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.frameforge.ui.StudioScreen
+import com.example.frameforge.ui.aether.AetherStudioScreen
 import com.example.frameforge.viewmodel.StudioViewModel
 import com.example.ui.theme.MyApplicationTheme
 
@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
     setContent {
       MyApplicationTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-          StudioScreen(viewModel = studioViewModel)
+          AetherStudioScreen(viewModel = studioViewModel)
         }
       }
     }
