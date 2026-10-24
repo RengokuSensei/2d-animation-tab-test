@@ -45,7 +45,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -606,15 +608,16 @@ fun A2Stage3DOverlay(
                     val cy = size.height / 2f
 
                     // 3 Stacked Perspective Layer Rectangles
-                    val layers = listOf(
-                        Triple(Offset(cx - 180f, cy - 90f), Size(360f, 200f), A2Theme.Rose.copy(alpha = 0.25f)),
-                        Triple(Offset(cx - 140f, cy - 50f), Size(360f, 200f), A2Theme.Accent.copy(alpha = 0.35f)),
-                        Triple(Offset(cx - 100f, cy - 10f), Size(360f, 200f), A2Theme.Amber.copy(alpha = 0.45f))
+                    val layerOffsets = listOf(
+                        Offset(cx - 180f, cy - 90f) to A2Theme.Rose.copy(alpha = 0.25f),
+                        Offset(cx - 140f, cy - 50f) to A2Theme.Accent.copy(alpha = 0.35f),
+                        Offset(cx - 100f, cy - 10f) to A2Theme.Amber.copy(alpha = 0.45f)
                     )
+                    val planeSize = Size(360f, 200f)
 
-                    for ((topL, sz, col) in layers) {
-                        drawRect(col, topL, sz)
-                        drawRect(Color.White.copy(alpha = 0.6f), topL, sz, style = Stroke(width = 1.5.dp.toPx()))
+                    for ((topL, col) in layerOffsets) {
+                        drawRect(col, topL, planeSize)
+                        drawRect(Color.White.copy(alpha = 0.6f), topL, planeSize, style = Stroke(width = 1.5.dp.toPx()))
                     }
                 }
 

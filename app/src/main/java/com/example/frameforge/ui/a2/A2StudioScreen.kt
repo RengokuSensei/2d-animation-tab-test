@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -149,7 +150,7 @@ fun A2StudioScreen(
                     .fillMaxSize(0.96f)
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSceneBgVisible) A2Theme.StageBackdropGradient else A2Theme.Ink900)
+                    .background(if (isSceneBgVisible) A2Theme.StageBackdropGradient else SolidColor(A2Theme.Ink900))
                     .border(1.dp, A2Theme.GlassBorder, RoundedCornerShape(16.dp))
             ) {
                 // PDF Reference Staged Layer (underneath drawing)
@@ -225,7 +226,7 @@ fun A2StudioScreen(
                 onUndo = { viewModel.undo() },
                 canRedo = true,
                 onRedo = { viewModel.redo() },
-                isOnionActive = onionSkinConfig.isEnabled,
+                isOnionActive = onionSkinConfig.enabled,
                 onToggleOnionPopover = { isOnionPopoverOpen = !isOnionPopoverOpen },
                 layerCount = project.layers.size,
                 onToggleLayersPopover = { isLayersPopoverOpen = !isLayersPopoverOpen },
@@ -305,7 +306,7 @@ fun A2StudioScreen(
         if (!isZenMode && currentMode == A2StudioMode.DRAW) {
             A2TimelineDock(
                 currentFrame = currentFrame,
-                totalFrames = project.frames.size,
+                totalFrames = project.totalFrames,
                 isPlaying = isPlaying,
                 onTogglePlay = { viewModel.togglePlayback() },
                 onStepPrev = { viewModel.stepFrame(-1) },
@@ -481,10 +482,10 @@ fun A2StudioScreen(
 
         if (isOnionPopoverOpen) {
             A2OnionPopover(
-                isEnabled = onionSkinConfig.isEnabled,
+                isEnabled = onionSkinConfig.enabled,
                 onToggleEnabled = { viewModel.toggleOnionSkin() },
-                opacity = onionSkinConfig.prevFrameOpacity,
-                onOpacityChange = { viewModel.setOnionSkinConfig(onionSkinConfig.copy(prevFrameOpacity = it, nextFrameOpacity = it)) },
+                opacity = onionSkinConfig.opacity,
+                onOpacityChange = { viewModel.setOnionSkinConfig(onionSkinConfig.copy(opacity = it)) },
                 onClose = { isOnionPopoverOpen = false },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
