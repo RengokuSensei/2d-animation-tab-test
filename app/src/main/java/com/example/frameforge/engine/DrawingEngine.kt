@@ -22,6 +22,9 @@ import com.example.frameforge.model.SelectionState
 import com.example.frameforge.model.StrokePoint
 import com.example.frameforge.model.ToolType
 import com.example.frameforge.model.TransformState
+import com.example.frameforge.ui.a2.CanvasPaperPreset
+import com.example.frameforge.ui.a2.GridType
+import com.example.frameforge.ui.a2.GuideType
 import java.util.LinkedList
 import kotlin.math.cos
 import kotlin.math.max
@@ -135,11 +138,47 @@ object DrawingEngine {
                 }
             }
             ToolType.WATERCOLOR -> {
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = stroke.size * 1.2f
-                paint.alpha = (paint.alpha * 0.35f).toInt().coerceIn(1, 255)
-                val path = buildSmoothPath(points)
-                canvas.drawPath(path, paint)
+                // 1. Soft wet pigment wash underlayer with edge pooling
+                val washPaint = Paint(paint).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = stroke.size * 1.15f
+                    alpha = (paint.alpha * 0.28f).toInt().coerceIn(1, 255)
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                val washPath = buildSmoothPath(points)
+                canvas.drawPath(washPath, washPaint)
+
+                // 2. Concentrated edge pooling contour (darker pigment boundary fringe)
+                val edgePaint = Paint(paint).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = stroke.size * 0.92f
+                    alpha = (paint.alpha * 0.22f).toInt().coerceIn(1, 255)
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                canvas.drawPath(washPath, edgePaint)
+
+                // 3. Stippled pigment grain settling into paper tooth (matching Concepts tablet stroke)
+                val grainPaint = Paint(paint).apply {
+                    style = Paint.Style.FILL
+                }
+                val radius = stroke.size / 2f
+                val step = max(1, points.size / 50)
+                for (idx in 0 until points.size step step) {
+                    val p = points[idx]
+                    val pRad = radius * (0.6f + 0.4f * p.pressure)
+                    for (k in 0..4) {
+                        val pseudoSeed = (p.x * 12.9898f + p.y * 78.233f + k * 37.719f)
+                        val rOff = ((sin(pseudoSeed.toDouble()) * 0.85).toFloat()) * pRad
+                        val ang = (cos((pseudoSeed * 1.7).toDouble()) * Math.PI).toFloat()
+                        val dabX = p.x + rOff * cos(ang)
+                        val dabY = p.y + rOff * sin(ang)
+                        val dabRadius = max(1f, pRad * 0.22f * (0.8f + 0.4f * sin((pseudoSeed * 3.1).toDouble()).toFloat()))
+                        grainPaint.alpha = (paint.alpha * 0.18f).toInt().coerceIn(1, 255)
+                        canvas.drawCircle(dabX, dabY, dabRadius, grainPaint)
+                    }
+                }
             }
             ToolType.CHARCOAL -> {
                 paint.style = Paint.Style.STROKE
@@ -190,10 +229,26 @@ object DrawingEngine {
                 }
             }
             ToolType.PENCIL -> {
+                // Core graphite stroke
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = max(1f, stroke.size * 0.75f)
+                paint.alpha = (paint.alpha * 0.75f).toInt().coerceIn(1, 255)
                 val path = buildSmoothPath(points)
                 canvas.drawPath(path, paint)
+
+                // Grainy graphite tooth speckle
+                val grainPaint = Paint(paint).apply {
+                    style = Paint.Style.FILL
+                    alpha = (paint.alpha * 0.35f).toInt().coerceIn(1, 255)
+                }
+                val step = max(1, points.size / 60)
+                for (idx in 0 until points.size step step) {
+                    val p = points[idx]
+                    val seed = (p.x * 31.415f + p.y * 47.123f)
+                    val jitterX = (sin(seed.toDouble()) * stroke.size * 0.35f).toFloat()
+                    val jitterY = (cos(seed.toDouble()) * stroke.size * 0.35f).toFloat()
+                    canvas.drawCircle(p.x + jitterX, p.y + jitterY, max(0.75f, stroke.size * 0.15f), grainPaint)
+                }
             }
             else -> {
                 paint.style = Paint.Style.STROKE
@@ -773,5 +828,332 @@ object DrawingEngine {
         canvas.drawCircle(0f, -halfH - stalkLen, handleRadius * 1.1f, rotHandlePaint)
 
         canvas.restore()
+    }
+
+    /**
+     * Concepts "Draw and Hold" Shape Recognition
+     * Automatically classifies freehand strokes into:
+     * - Line (straight line from start to end)
+     * - Circle / Ellipse (regular closed curve)
+     * - Rectangle (4-corner closed polygon)
+     * - Arc (smooth curved segment)
+     */
+    fun recognizeShape(points: List<StrokePoint>): List<StrokePoint>? {
+        if (points.size < 12) return null
+
+        var minX = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        var arcLength = 0f
+        for (i in 0 until points.size - 1) {
+            val p0 = points[i]
+            val p1 = points[i + 1]
+            minX = min(minX, p0.x)
+            maxX = max(maxX, p0.x)
+            minY = min(minY, p0.y)
+            maxY = max(maxY, p0.y)
+            arcLength += Math.hypot((p1.x - p0.x).toDouble(), (p1.y - p0.y).toDouble()).toFloat()
+        }
+        val last = points.last()
+        minX = min(minX, last.x)
+        maxX = max(maxX, last.x)
+        minY = min(minY, last.y)
+        maxY = max(maxY, last.y)
+
+        val first = points.first()
+        val directDist = Math.hypot((last.x - first.x).toDouble(), (last.y - first.y).toDouble()).toFloat()
+        val avgPressure = points.map { it.pressure }.average().toFloat().coerceIn(0.2f, 1.0f)
+        val avgTilt = points.first().tiltDeg
+
+        // 1. Straight Line Check: direct distance / arc length > 0.92
+        if (directDist / arcLength > 0.92f && arcLength > 30f) {
+            val numSamples = 24
+            val res = mutableListOf<StrokePoint>()
+            for (i in 0..numSamples) {
+                val t = i / numSamples.toFloat()
+                val x = first.x + t * (last.x - first.x)
+                val y = first.y + t * (last.y - first.y)
+                res.add(StrokePoint(x, y, avgPressure, tiltDeg = avgTilt))
+            }
+            return res
+        }
+
+        // 2. Closed Shape Check: endpoints meet within 22% of arc length or 45px
+        val isClosed = (directDist / arcLength < 0.22f) || (directDist < 45f)
+        if (isClosed && arcLength > 60f) {
+            val centerX = (minX + maxX) / 2f
+            val centerY = (minY + maxY) / 2f
+            val halfW = (maxX - minX) / 2f
+            val halfH = (maxY - minY) / 2f
+
+            // Calculate radial standard deviation from centroid
+            var sumDist = 0f
+            for (p in points) {
+                sumDist += Math.hypot((p.x - centerX).toDouble(), (p.y - centerY).toDouble()).toFloat()
+            }
+            val avgRad = sumDist / points.size
+            var sumVariance = 0f
+            for (p in points) {
+                val d = Math.hypot((p.x - centerX).toDouble(), (p.y - centerY).toDouble()).toFloat()
+                sumVariance += (d - avgRad) * (d - avgRad)
+            }
+            val radStdDev = kotlin.math.sqrt(sumVariance / points.size)
+
+            // Circle / Ellipse: low radial variance (< 22%)
+            if (radStdDev / avgRad < 0.22f) {
+                val numSamples = 48
+                val res = mutableListOf<StrokePoint>()
+                for (i in 0..numSamples) {
+                    val angle = (i / numSamples.toFloat()) * (2f * Math.PI.toFloat())
+                    val x = centerX + halfW * cos(angle.toDouble()).toFloat()
+                    val y = centerY + halfH * sin(angle.toDouble()).toFloat()
+                    res.add(StrokePoint(x, y, avgPressure, tiltDeg = avgTilt))
+                }
+                return res
+            } else {
+                // Rectangle: snap to 4 corners of bounding box
+                val numSamplesPerSide = 12
+                val res = mutableListOf<StrokePoint>()
+                // Top side (minX, minY) -> (maxX, minY)
+                for (i in 0..numSamplesPerSide) {
+                    val t = i / numSamplesPerSide.toFloat()
+                    res.add(StrokePoint(minX + t * (maxX - minX), minY, avgPressure, tiltDeg = avgTilt))
+                }
+                // Right side (maxX, minY) -> (maxX, maxY)
+                for (i in 1..numSamplesPerSide) {
+                    val t = i / numSamplesPerSide.toFloat()
+                    res.add(StrokePoint(maxX, minY + t * (maxY - minY), avgPressure, tiltDeg = avgTilt))
+                }
+                // Bottom side (maxX, maxY) -> (minX, maxY)
+                for (i in 1..numSamplesPerSide) {
+                    val t = i / numSamplesPerSide.toFloat()
+                    res.add(StrokePoint(maxX - t * (maxX - minX), maxY, avgPressure, tiltDeg = avgTilt))
+                }
+                // Left side (minX, maxY) -> (minX, minY)
+                for (i in 1..numSamplesPerSide) {
+                    val t = i / numSamplesPerSide.toFloat()
+                    res.add(StrokePoint(minX, maxY - t * (maxY - minY), avgPressure, tiltDeg = avgTilt))
+                }
+                return res
+            }
+        }
+
+        // 3. Smooth Curved Arc: fit a 3-point quadratic bezier through start, mid, end
+        if (directDist / arcLength in 0.65f..0.92f && points.size >= 16) {
+            val mid = points[points.size / 2]
+            val ctrlX = 2f * mid.x - 0.5f * (first.x + last.x)
+            val ctrlY = 2f * mid.y - 0.5f * (first.y + last.y)
+
+            val numSamples = 32
+            val res = mutableListOf<StrokePoint>()
+            for (i in 0..numSamples) {
+                val t = i / numSamples.toFloat()
+                val oneMinusT = 1f - t
+                val x = oneMinusT * oneMinusT * first.x + 2f * oneMinusT * t * ctrlX + t * t * last.x
+                val y = oneMinusT * oneMinusT * first.y + 2f * oneMinusT * t * ctrlY + t * t * last.y
+                res.add(StrokePoint(x, y, avgPressure, tiltDeg = avgTilt))
+            }
+            return res
+        }
+
+        return null
+    }
+
+    /**
+     * Concepts Measure (1:1 pts): Renders live dimension tag above vector strokes
+     */
+    fun renderMeasureTag(canvas: Canvas, stroke: DrawingStroke) {
+        val points = stroke.points
+        if (points.size < 2) return
+
+        var totalLen = 0f
+        for (i in 0 until points.size - 1) {
+            val dx = points[i + 1].x - points[i].x
+            val dy = points[i + 1].y - points[i].y
+            totalLen += Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+        }
+        val midPt = points[points.size / 2]
+        val text = String.format("%.1f pts", totalLen)
+
+        val textPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.WHITE
+            textSize = 22f
+            typeface = android.graphics.Typeface.MONOSPACE
+            textAlign = Paint.Align.CENTER
+        }
+        val bgPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.argb(220, 15, 17, 21) // Ink900 dark glass
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.argb(180, 56, 189, 248) // A2 Sky Blue
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
+
+        val textBounds = android.graphics.Rect()
+        textPaint.getTextBounds(text, 0, text.length, textBounds)
+        val padX = 12f
+        val padY = 6f
+        val rect = RectF(
+            midPt.x - textBounds.width() / 2f - padX,
+            midPt.y - textBounds.height() - padY * 2 - 10f,
+            midPt.x + textBounds.width() / 2f + padX,
+            midPt.y - 10f
+        )
+        canvas.drawRoundRect(rect, 8f, 8f, bgPaint)
+        canvas.drawRoundRect(rect, 8f, 8f, borderPaint)
+        canvas.drawText(text, midPt.x, rect.bottom - padY - 2f, textPaint)
+    }
+
+    /**
+     * Concepts Precision Grids (Dot, Square, Isometric)
+     */
+    fun renderGrid(
+        canvas: Canvas,
+        docWidth: Float,
+        docHeight: Float,
+        gridType: GridType,
+        paperPreset: CanvasPaperPreset
+    ) {
+        if (gridType == GridType.NO_GRID) return
+
+        val isDark = paperPreset == CanvasPaperPreset.DARK_CINEMA || paperPreset == CanvasPaperPreset.BLUEPRINT
+        val gridColor = if (paperPreset == CanvasPaperPreset.BLUEPRINT) {
+            Color.argb(80, 255, 255, 255)
+        } else if (isDark) {
+            Color.argb(50, 255, 255, 255)
+        } else {
+            Color.argb(40, 0, 0, 0)
+        }
+
+        val step = 48f
+        when (gridType) {
+            GridType.DOT -> {
+                val dotPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = gridColor
+                    style = Paint.Style.FILL
+                }
+                var y = step
+                while (y < docHeight) {
+                    var x = step
+                    while (x < docWidth) {
+                        canvas.drawCircle(x, y, 2.0f, dotPaint)
+                        x += step
+                    }
+                    y += step
+                }
+            }
+            GridType.SQUARE -> {
+                val linePaint = Paint().apply {
+                    isAntiAlias = true
+                    color = gridColor
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.0f
+                }
+                var x = step
+                while (x < docWidth) {
+                    canvas.drawLine(x, 0f, x, docHeight, linePaint)
+                    x += step
+                }
+                var y = step
+                while (y < docHeight) {
+                    canvas.drawLine(0f, y, docWidth, y, linePaint)
+                    y += step
+                }
+            }
+            GridType.ISOMETRIC -> {
+                val isoPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = gridColor
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.0f
+                }
+                var x = 0f
+                while (x < docWidth) {
+                    canvas.drawLine(x, 0f, x, docHeight, isoPaint)
+                    x += step
+                }
+                val diagCount = ((docWidth + docHeight) / step).toInt()
+                for (k in -diagCount..diagCount) {
+                    val startX = k * step
+                    canvas.drawLine(startX, 0f, startX + docHeight * 0.577f, docHeight, isoPaint)
+                    canvas.drawLine(startX, 0f, startX - docHeight * 0.577f, docHeight, isoPaint)
+                }
+            }
+            else -> {}
+        }
+    }
+
+    /**
+     * Concepts Interactive Guide Overlay (Line, Arc, Ellipse, Rectangle)
+     */
+    fun renderGuideOverlay(
+        canvas: Canvas,
+        docWidth: Float,
+        docHeight: Float,
+        guideType: GuideType
+    ) {
+        val guidePaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.argb(190, 56, 189, 248) // Cyan guide line
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+            pathEffect = DashPathEffect(floatArrayOf(14f, 8f), 0f)
+        }
+        val handlePaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.argb(255, 245, 158, 11) // Amber handle
+            style = Paint.Style.FILL
+        }
+        val handleRing = Paint().apply {
+            isAntiAlias = true
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
+        val cx = docWidth / 2f
+        val cy = docHeight / 2f
+
+        when (guideType) {
+            GuideType.LINE -> {
+                canvas.drawLine(cx - 300f, cy, cx + 300f, cy, guidePaint)
+                canvas.drawCircle(cx - 300f, cy, 9f, handlePaint)
+                canvas.drawCircle(cx - 300f, cy, 9f, handleRing)
+                canvas.drawCircle(cx + 300f, cy, 9f, handlePaint)
+                canvas.drawCircle(cx + 300f, cy, 9f, handleRing)
+                canvas.drawCircle(cx, cy, 7f, handlePaint)
+            }
+            GuideType.ARC -> {
+                val rect = RectF(cx - 240f, cy - 240f, cx + 240f, cy + 240f)
+                canvas.drawArc(rect, 180f, 90f, false, guidePaint)
+                canvas.drawCircle(cx - 240f, cy, 9f, handlePaint)
+                canvas.drawCircle(cx - 240f, cy, 9f, handleRing)
+                canvas.drawCircle(cx, cy - 240f, 9f, handlePaint)
+                canvas.drawCircle(cx, cy - 240f, 9f, handleRing)
+            }
+            GuideType.ELLIPSE -> {
+                val rect = RectF(cx - 280f, cy - 180f, cx + 280f, cy + 180f)
+                canvas.drawOval(rect, guidePaint)
+                canvas.drawCircle(cx - 280f, cy, 8f, handlePaint)
+                canvas.drawCircle(cx + 280f, cy, 8f, handlePaint)
+                canvas.drawCircle(cx, cy - 180f, 8f, handlePaint)
+                canvas.drawCircle(cx, cy + 180f, 8f, handlePaint)
+            }
+            GuideType.RECTANGLE -> {
+                val rect = RectF(cx - 250f, cy - 180f, cx + 250f, cy + 180f)
+                canvas.drawRect(rect, guidePaint)
+                canvas.drawCircle(rect.left, rect.top, 8f, handlePaint)
+                canvas.drawCircle(rect.right, rect.top, 8f, handlePaint)
+                canvas.drawCircle(rect.right, rect.bottom, 8f, handlePaint)
+                canvas.drawCircle(rect.left, rect.bottom, 8f, handlePaint)
+            }
+        }
     }
 }

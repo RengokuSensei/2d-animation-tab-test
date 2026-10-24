@@ -363,6 +363,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _isTimeStretchActive = MutableStateFlow(false)
     val isTimeStretchActive: StateFlow<Boolean> = _isTimeStretchActive.asStateFlow()
 
+    private val _isShapeRecognitionEnabled = MutableStateFlow(true)
+    val isShapeRecognitionEnabled: StateFlow<Boolean> = _isShapeRecognitionEnabled.asStateFlow()
+
+    fun setShapeRecognitionEnabled(enabled: Boolean) {
+        _isShapeRecognitionEnabled.value = enabled
+    }
+
     val autoAdvanceController = AutoAdvanceFlipbookController(viewModelScope) { shiftX, shiftY ->
         advanceFrameForAutoAdvance(shiftX, shiftY)
     }
@@ -500,7 +507,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
         pushHistory()
 
-        val smoothedPoints = DrawingEngine.smoothPoints(stroke.points, stroke.smoothing)
+        val recognizedPoints = if (_isShapeRecognitionEnabled.value) {
+            DrawingEngine.recognizeShape(stroke.points)
+        } else null
+
+        if (recognizedPoints != null) {
+            showStatus("✨ Snapped to Geometric Shape")
+        }
+
+        val smoothedPoints = recognizedPoints ?: DrawingEngine.smoothPoints(stroke.points, stroke.smoothing)
         val finalStroke = stroke.copy(points = smoothedPoints)
 
         val frame = _currentFrame.value

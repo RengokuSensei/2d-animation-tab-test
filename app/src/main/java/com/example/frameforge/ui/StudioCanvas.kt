@@ -73,6 +73,9 @@ import com.example.frameforge.model.PressureCurve
 import com.example.frameforge.model.SelectionState
 import com.example.frameforge.model.ToolType
 import com.example.frameforge.model.TransformState
+import com.example.frameforge.ui.a2.CanvasPaperPreset
+import com.example.frameforge.ui.a2.GridType
+import com.example.frameforge.ui.a2.GuideType
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -87,6 +90,12 @@ fun StudioCanvas(
     selectedBoneId: String?,
     isIkMode: Boolean,
     isCanvasLocked: Boolean = false,
+    paperPreset: CanvasPaperPreset = CanvasPaperPreset.HEAVYWEIGHT,
+    isGridEnabled: Boolean = false,
+    gridType: GridType = GridType.NO_GRID,
+    isGuideEnabled: Boolean = false,
+    guideType: GuideType = GuideType.ARC,
+    isMeasureEnabled: Boolean = false,
     palmRejectionMode: PalmRejectionMode = PalmRejectionMode.AUTOMATIC,
     pressureCurve: PressureCurve = PressureCurve.LINEAR,
     adjustmentState: AdjustmentState = AdjustmentState(),
@@ -330,22 +339,19 @@ fun StudioCanvas(
                 size = Size(docWidth, docHeight)
             )
 
-            // Paper base
+            // Authentic Concepts Paper base
             drawRect(
-                color = Color.White,
+                color = paperPreset.color,
                 topLeft = Offset(docLeft, docTop),
                 size = Size(docWidth, docHeight)
             )
 
-            // Transparency checkerboard
-            drawCheckerboard(docLeft, docTop, docWidth, docHeight, scale)
-
             // Canvas border
             drawRect(
-                color = Color(0xFF0A84FF), // Procreate Blue
+                color = if (paperPreset == CanvasPaperPreset.DARK_CINEMA) Color(0xFF38BDF8).copy(alpha = 0.4f) else Color(0x33000000),
                 topLeft = Offset(docLeft, docTop),
                 size = Size(docWidth, docHeight),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f)
             )
 
             drawIntoCanvas { composeCanvas ->
@@ -354,6 +360,17 @@ fun StudioCanvas(
                 nativeCanvas.clipRect(docLeft, docTop, docLeft + docWidth, docTop + docHeight)
                 nativeCanvas.translate(docLeft, docTop)
                 nativeCanvas.scale(scale, scale)
+
+                // 0. Draw Concepts Precision Grid (Dot, Square, Isometric)
+                if (isGridEnabled) {
+                    DrawingEngine.renderGrid(
+                        canvas = nativeCanvas,
+                        docWidth = project.canvasWidth.toFloat(),
+                        docHeight = project.canvasHeight.toFloat(),
+                        gridType = gridType,
+                        paperPreset = paperPreset
+                    )
+                }
 
                 // 1. Draw 4K Video Rotoscoping Underlay (if enabled and set to underlay)
                 if (project.videoTrack.isEnabled && project.videoTrack.isUnderlay) {
@@ -402,12 +419,18 @@ fun StudioCanvas(
                     val cel = celsByLayer[layer.id] ?: continue
                     for (stroke in cel.strokes) {
                         DrawingEngine.renderStroke(nativeCanvas, stroke)
+                        if (isMeasureEnabled) {
+                            DrawingEngine.renderMeasureTag(nativeCanvas, stroke)
+                        }
                     }
                 }
 
                 // 4. Draw in-progress live stroke
                 if (currentStroke != null) {
                     DrawingEngine.renderStroke(nativeCanvas, currentStroke)
+                    if (isMeasureEnabled) {
+                        DrawingEngine.renderMeasureTag(nativeCanvas, currentStroke)
+                    }
                 }
 
                 // 5. Draw 4K Video Rotoscoping Overlay (if enabled and set to overlay)
@@ -451,6 +474,16 @@ fun StudioCanvas(
                         docHeight = project.canvasHeight,
                         state = transformState,
                         scale = scale
+                    )
+                }
+
+                // 8b. Draw Concepts Precision Guide Overlay (Line, Arc, Ellipse, Rectangle)
+                if (isGuideEnabled) {
+                    DrawingEngine.renderGuideOverlay(
+                        canvas = nativeCanvas,
+                        docWidth = project.canvasWidth.toFloat(),
+                        docHeight = project.canvasHeight.toFloat(),
+                        guideType = guideType
                     )
                 }
 

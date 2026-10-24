@@ -200,6 +200,12 @@ fun A2StudioScreen(
                     selectedBoneId = null,
                     isIkMode = false,
                     isCanvasLocked = isCanvasLocked,
+                    paperPreset = selectedPaperPreset,
+                    isGridEnabled = isPrecisionGridEnabled,
+                    gridType = precisionGridType,
+                    isGuideEnabled = isPrecisionGuideEnabled,
+                    guideType = precisionGuideType,
+                    isMeasureEnabled = isPrecisionMeasureEnabled,
                     palmRejectionMode = palmRejectionMode,
                     pressureCurve = pressureCurve,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
@@ -291,7 +297,11 @@ fun A2StudioScreen(
                     onSetBrushOpacity = { viewModel.setBrushOpacity(it) },
                     brushSmoothing = brushSmoothing,
                     onSetBrushSmoothing = { viewModel.setBrushSmoothing(it) },
-                    onOpenBrushesMarket = { isBrushesMarketOpen = true }
+                    onOpenBrushesMarket = { isBrushesMarketOpen = true },
+                    canUndo = true,
+                    onUndo = { viewModel.undo() },
+                    canRedo = true,
+                    onRedo = { viewModel.redo() }
                 )
 
                 // Precision Stack
@@ -309,7 +319,10 @@ fun A2StudioScreen(
                     guideType = precisionGuideType,
                     onChangeGuideType = { precisionGuideType = it },
                     isRecognitionEnabled = isPrecisionRecogEnabled,
-                    onToggleRecognition = { isPrecisionRecogEnabled = it },
+                    onToggleRecognition = {
+                        isPrecisionRecogEnabled = it
+                        viewModel.setShapeRecognitionEnabled(it)
+                    },
                     onInsertText = { isTextModalOpen = true },
                     onImportPhotoRef = { isPhotoInspectorOpen = true },
                     onClearLayer = { viewModel.clearCurrentCel() }

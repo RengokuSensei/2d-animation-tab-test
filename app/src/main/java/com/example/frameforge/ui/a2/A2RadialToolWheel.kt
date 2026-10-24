@@ -30,7 +30,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -80,6 +82,10 @@ fun A2RadialToolWheel(
     brushSmoothing: Float,
     onSetBrushSmoothing: (Float) -> Unit,
     onOpenBrushesMarket: () -> Unit,
+    canUndo: Boolean = true,
+    onUndo: () -> Unit = {},
+    canRedo: Boolean = true,
+    onRedo: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isSizePopoverOpen by remember { mutableStateOf(false) }
@@ -100,6 +106,47 @@ fun A2RadialToolWheel(
     }
 
     Box(modifier = modifier) {
+        // Concepts Undo & Redo Wing Buttons (outer curved buttons attached to left rim)
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = (-18).dp, y = (-42).dp)
+                .size(32.dp)
+                .shadow(10.dp, CircleShape)
+                .clip(CircleShape)
+                .background(A2Theme.Ink900.copy(alpha = 0.94f))
+                .border(1.dp, A2Theme.GlassBorder, CircleShape)
+                .clickable(enabled = canUndo) { onUndo() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Undo,
+                contentDescription = "Undo",
+                tint = if (canUndo) Color.White else Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = (-18).dp, y = 42.dp)
+                .size(32.dp)
+                .shadow(10.dp, CircleShape)
+                .clip(CircleShape)
+                .background(A2Theme.Ink900.copy(alpha = 0.94f))
+                .border(1.dp, A2Theme.GlassBorder, CircleShape)
+                .clickable(enabled = canRedo) { onRedo() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Redo,
+                contentDescription = "Redo",
+                tint = if (canRedo) Color.White else Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
         // Main Wheel Disk Container (200dp x 200dp)
         Box(
             modifier = Modifier
