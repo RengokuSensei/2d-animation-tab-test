@@ -99,7 +99,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.5.0"
+          TAG="v1.7.0"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release $TAG exists. Updating APK asset..."
@@ -107,12 +107,15 @@ jobs:
           else
             echo "Creating Release $TAG with APK..."
             gh release create "$TAG" "$APK" \
-              --title "FrameForge v1.5.0 - A2 Studio Adoption & Concepts Drawing Wheel" \
-              --notes $'### 🎨 FrameForge v1.5.0 — Complete A2 Studio & Concepts Drawing Overhaul\n\n- 🎯 **1:1 Adoption of A2 Studio Blueprint**: Adopted cleanly from `A2_studio.html` with zero remnants of legacy Procreate toolbars or workspace tabs.\n- 🎡 **Concepts 8-Wedge Radial Tool Wheel**: Authentic radial wheel with Pen, Soft Pencil, Fill, Lasso, Nudge, Slice, Hard Mask, and Watercolor wedges.\n- ⚙️ **Radial Inner Hub Controls**: Stroke Size pts button (with presets 3pt, 8pt, 30pt, 37.5pt), Active Color hub button, Smoothing % button (with 0%, 10%, 50%, 100% presets), and Opacity % button.\n- 📐 **Concepts Precision Stack**: Collapsible precision dock with Grid (No Grid, Dot, Square, Isometric), Snap (To Grid/Guide), Measure (1:1 pts readout), Guide (Arc, Line, Ellipse, Rect), Shape Recognition (Auto-Snap), and quick Text/Ref/Clear tools.\n- 🌈 **Concentric Radial COPIC Color Wheel**: 12 chromatic color families with COPIC codes (R27 Cadmium Red, B14 Light Blue, etc.), Eyedropper, and HSL/RGB modes.\n- 🖌️ **Brushes & Texture Market Drawer**: Live interactive scratchpad canvas to test brush responsiveness before selecting, plus 10 categorized brush packs.\n- 📄 **PDF Reference & Documentary Carousel Shelf**: Stepper (Page 12/48), stage background toggle, and "Extract Diagram as Cel" vector transfer.\n- 🖼️ **Photo Asset Inspector**: Floating inspector with Tracing Opacity, Flip H/V, Crop, and Chroma Key / White Paper background removal.\n- ⏱️ **40dp Diamond Scrubber & Expanded NLE Studio**: Play/Pause, Step Prev/Next, Frame readout, Diamond keyframe strip, Add/Duplicate frame, FPS selector, and full multi-track NLE drawer (Track C1 2D cels, Track V1 Video PiP, Track A1 Voiceover with live VU meter, Track A2 Foley).\n- 🎛️ **Studio Mode Overlays**: Interactive Node Compositor DAG, Universal Object Velocity Bezier Curve Editor, Live 3-Way Color Grading wheels, and 3D Multiplane Depth Stage.\n- 🦀 **Rust Native Core Powered**: `libframeforge.so` bundled with SIMD acceleration and 144Hz stylus tracking.\n- 🎬 **One-Click Gallery Export**: Real-time progress bar saving directly to `Movies/FrameForge` with instant system Share intent.\n\nDownload `app-debug.apk` below to install directly on your Android tablet.' \
+              --title "FrameForge v1.7.0 - Persistent Logs Taker, NLE Video Editor & Canvas Touch Fixes" \
+              --notes $'### 🚀 FrameForge v1.7.0 — Persistent Logs Taker, Real NLE Video Editor & Touch Fixes\n\n- 🛡️ **Persistent Action & Crash Logger ("Logs Taker")**: Global uncaught exception handler catching crashes mid-session, recording system metrics, thread forensics, stack trace, and 500 action breadcrumbs to `crash_latest.txt` on storage.\n- 📋 **In-App Logs Modal**: Real-time terminal log viewer with category filters (ALL, CRASHES, UI, TOUCH, PLAYBACK, VIDEO, ERRORS), "Copy All", "Share Log File", and "Clear Logs".\n- 🎬 **Functional NLE Video Editor & PiP B-Roll Stage**: 1:1 parity with `A2_studio.html`. Interactive Track V1 filmstrip with In/Out trim handles, Razor Split, Ripple Delete, Speed multiplier (0.5x, 1x, 1.5x, 2x), and real video file import (`video/*`).\n- 🛰️ **Cinematic Documentary B-Roll PiP**: Animated telemetry HUD, celestial orbits, SMPTE timecode overlay, and toggle between Floating PiP Box and Full Canvas Underlay for rotoscoping/tracing.\n- ⏱️ **Smooth Continuous Timeline Playback**: Fixed loop advancing `currentFrame` at configured FPS (8/12/24 fps), updating diamond scrubber, 2D cels, and video stage synchronously.\n- ✍️ **Canvas Touch & Palm Rejection Fix**: Finger touches draw immediately out-of-the-box (`PalmRejectionMode.FINGER_AND_STYLUS` default, `FingerTouchMode.DRAW` default, `touchMajor > 200f` palm threshold).' \
               --repo "${{ github.repository }}"
           fi
 
-          # Also keep v1.0.0 updated for backward compatibility
+          # Also keep v1.6.0 and v1.0.0 updated for backward compatibility
+          if gh release view v1.6.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload v1.6.0 "$APK" --clobber --repo "${{ github.repository }}" || true
+          fi
           if gh release view v1.0.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release upload v1.0.0 "$APK" --clobber --repo "${{ github.repository }}" || true
           fi

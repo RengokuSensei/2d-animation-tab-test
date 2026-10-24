@@ -70,6 +70,7 @@ fun A2SettingsDrawer(
     onPalmModeChange: (PalmRejectionMode) -> Unit,
     pressureCurve: PressureCurve,
     onPressureCurveChange: (PressureCurve) -> Unit,
+    onOpenLogsModal: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -417,6 +418,34 @@ fun A2SettingsDrawer(
                             ) {
                                 Text(text = if (enableTilt) "Tilt: ON" else "Tilt: OFF", color = if (enableTilt) A2Theme.Amber else A2Theme.TextSecondary, fontSize = 10.sp)
                             }
+                        }
+                    }
+
+                    // SECTION 5: SYSTEM & CRASH LOGS
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(A2Theme.Accent.copy(alpha = 0.15f))
+                            .border(1.dp, A2Theme.Accent.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .clickable {
+                                onClose()
+                                onOpenLogsModal()
+                            }
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "📋 View System & Crash Logs",
+                                color = A2Theme.Accent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
                         }
                     }
                 }

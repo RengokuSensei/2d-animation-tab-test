@@ -126,15 +126,20 @@ fun A2PalmRejectBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                val modeColor = when (fingerTouchMode) {
+                    FingerTouchMode.DRAW -> A2Theme.Mint
+                    FingerTouchMode.PAN -> A2Theme.Accent
+                    FingerTouchMode.IGNORE -> A2Theme.Rose
+                }
                 Icon(
                     imageVector = Icons.Default.PanTool,
                     contentDescription = "Finger Action",
-                    tint = A2Theme.Amber,
+                    tint = modeColor,
                     modifier = Modifier.size(13.dp)
                 )
                 Text(
-                    text = fingerTouchMode.label,
-                    color = A2Theme.Amber,
+                    text = "Finger: ${fingerTouchMode.label}",
+                    color = modeColor,
                     fontSize = 10.sp
                 )
             }

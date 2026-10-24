@@ -73,7 +73,10 @@ import com.example.frameforge.model.PressureCurve
 import com.example.frameforge.model.SelectionState
 import com.example.frameforge.model.ToolType
 import com.example.frameforge.model.TransformState
+import androidx.compose.ui.platform.LocalContext
+import com.example.frameforge.log.AppLogger
 import com.example.frameforge.ui.a2.CanvasPaperPreset
+import com.example.frameforge.ui.a2.FingerTouchMode
 import com.example.frameforge.ui.a2.GridType
 import com.example.frameforge.ui.a2.GuideType
 import kotlin.math.cos
@@ -96,7 +99,8 @@ fun StudioCanvas(
     isGuideEnabled: Boolean = false,
     guideType: GuideType = GuideType.ARC,
     isMeasureEnabled: Boolean = false,
-    palmRejectionMode: PalmRejectionMode = PalmRejectionMode.AUTOMATIC,
+    palmRejectionMode: PalmRejectionMode = PalmRejectionMode.FINGER_AND_STYLUS,
+    fingerTouchMode: FingerTouchMode = FingerTouchMode.DRAW,
     pressureCurve: PressureCurve = PressureCurve.LINEAR,
     adjustmentState: AdjustmentState = AdjustmentState(),
     selectionState: SelectionState = SelectionState(),
@@ -155,6 +159,12 @@ fun StudioCanvas(
         project.boneRig.computeWorldTransforms(currPose)
     }
 
+    var prevPanFingerX by remember { mutableFloatStateOf(0f) }
+    var prevPanFingerY by remember { mutableFloatStateOf(0f) }
+    var isFingerPanningActive by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -180,16 +190,47 @@ fun StudioCanvas(
                 .pointerInteropFilter { motionEvent ->
                     val toolType = motionEvent.getToolType(0)
                     val isStylus = toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
-                    val isLargeContact = motionEvent.touchMajor > 35f
+                    val isLargeContact = motionEvent.touchMajor > 200f // Real palm resting on glass
+
+                    val isFingerBlocked = !isStylus && (fingerTouchMode == FingerTouchMode.IGNORE)
+                    val isFingerPan = !isStylus && (fingerTouchMode == FingerTouchMode.PAN)
 
                     // Smart Palm Rejection:
-                    // 1. If STYLUS_ONLY, reject all non-stylus touches completely from drawing. Hand/palm produces ZERO stray marks.
+                    // 1. If STYLUS_ONLY, reject all non-stylus touches completely from drawing.
                     // 2. If AUTOMATIC, reject if large palm contact or if a stylus stroke is already in progress,
                     //    or if multiple fingers are touching.
+                    // 3. If FINGER_AND_STYLUS, both finger and pen draw cleanly out-of-the-box.
                     val reject = when (palmRejectionMode) {
                         PalmRejectionMode.STYLUS_ONLY -> !isStylus
-                        PalmRejectionMode.AUTOMATIC -> (!isStylus && (isLargeContact || isStylusStrokeInProgress || motionEvent.pointerCount > 1))
-                        PalmRejectionMode.FINGER_AND_STYLUS -> motionEvent.pointerCount > 1
+                        PalmRejectionMode.AUTOMATIC -> (!isStylus && (isLargeContact || isStylusStrokeInProgress || isFingerBlocked || motionEvent.pointerCount > 1))
+                        PalmRejectionMode.FINGER_AND_STYLUS -> (!isStylus && (isLargeContact || isFingerBlocked || motionEvent.pointerCount > 1))
+                    }
+
+                    // Single-Finger Pan Mode
+                    if (isFingerPan && motionEvent.pointerCount == 1) {
+                        when (motionEvent.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                isFingerPanningActive = true
+                                prevPanFingerX = motionEvent.x
+                                prevPanFingerY = motionEvent.y
+                                return@pointerInteropFilter true
+                            }
+                            MotionEvent.ACTION_MOVE -> {
+                                if (isFingerPanningActive && !isCanvasLocked) {
+                                    val dx = motionEvent.x - prevPanFingerX
+                                    val dy = motionEvent.y - prevPanFingerY
+                                    offsetX += dx
+                                    offsetY += dy
+                                    prevPanFingerX = motionEvent.x
+                                    prevPanFingerY = motionEvent.y
+                                }
+                                return@pointerInteropFilter true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                isFingerPanningActive = false
+                                return@pointerInteropFilter true
+                            }
+                        }
                     }
 
                     // Two-Finger Pinch-Zoom & Pan Navigation
@@ -372,14 +413,17 @@ fun StudioCanvas(
                     )
                 }
 
-                // 1. Draw 4K Video Rotoscoping Underlay (if enabled and set to underlay)
-                if (project.videoTrack.isEnabled && project.videoTrack.isUnderlay) {
-                    RotoscopingEngine.renderRotoscopingFrame(
+                // 1. Draw 4K Video Rotoscoping & Stage Underlay
+                if (project.videoTrack.isEnabled && (project.videoTrack.isUnderlay || project.videoTrack.pipTransform.isUnderlayMode)) {
+                    RotoscopingEngine.renderVideoStagePiP(
                         canvas = nativeCanvas,
                         docWidth = project.canvasWidth,
                         docHeight = project.canvasHeight,
                         frameIndex = currentFrame,
-                        track = project.videoTrack
+                        totalFrames = project.totalFrames,
+                        fps = project.fps,
+                        track = project.videoTrack,
+                        context = context
                     )
                 }
 
@@ -556,6 +600,20 @@ fun StudioCanvas(
                             currentFrame = currentFrame
                         )
                     }
+                }
+
+                // 15. Draw Video Stage PiP Floating Window (A2_studio.html specification)
+                if (project.videoTrack.isEnabled && !project.videoTrack.pipTransform.isUnderlayMode && project.videoTrack.pipTransform.isVisible) {
+                    RotoscopingEngine.renderVideoStagePiP(
+                        canvas = nativeCanvas,
+                        docWidth = project.canvasWidth,
+                        docHeight = project.canvasHeight,
+                        frameIndex = currentFrame,
+                        totalFrames = project.totalFrames,
+                        fps = project.fps,
+                        track = project.videoTrack,
+                        context = context
+                    )
                 }
 
                 nativeCanvas.restore()

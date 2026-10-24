@@ -7,10 +7,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,11 +26,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.frameforge.model.A2VideoClip
 
 @Composable
 fun A2TimelineDock(
@@ -69,12 +75,21 @@ fun A2TimelineDock(
     onChangeFps: (Int) -> Unit,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
-    // NLE actions
+    // Real NLE Video Clips & Actions
+    videoClips: List<A2VideoClip> = emptyList(),
+    selectedClipId: String? = null,
+    onSelectClip: (String) -> Unit = {},
     onAddVideoClip: () -> Unit,
+    onImportRealVideo: () -> Unit = {},
     onRazorSplit: () -> Unit,
     onTrimIn: () -> Unit,
     onTrimOut: () -> Unit,
     onRippleDelete: () -> Unit,
+    onCycleClipSpeed: () -> Unit = {},
+    onTogglePipVisible: () -> Unit = {},
+    onTogglePipUnderlay: () -> Unit = {},
+    isPipVisible: Boolean = true,
+    isUnderlayMode: Boolean = false,
     onToggleRecordVoiceover: () -> Unit,
     isRecordingVoiceover: Boolean,
     modifier: Modifier = Modifier
@@ -317,6 +332,29 @@ fun A2TimelineDock(
                                 }
                             }
 
+                            // Import Real Video
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(A2Theme.Mint.copy(alpha = 0.15f))
+                                    .border(1.dp, A2Theme.Mint.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                    .clickable { onImportRealVideo() }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FileDownload,
+                                        contentDescription = "Import Video",
+                                        tint = A2Theme.Mint,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(text = "Import MP4", color = A2Theme.Mint, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
                             // Razor Split
                             Box(
                                 modifier = Modifier
@@ -370,6 +408,55 @@ fun A2TimelineDock(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(text = "Ripple Del", color = A2Theme.Rose, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Clip Speed
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(A2Theme.Ink850)
+                                    .clickable { onCycleClipSpeed() }
+                                    .padding(horizontal = 7.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = "Speed",
+                                        tint = A2Theme.TextSecondary,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(text = "Speed", color = A2Theme.TextPrimary, fontSize = 10.sp)
+                                }
+                            }
+
+                            // PiP Floating vs Full Underlay Stage Mode
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isUnderlayMode) A2Theme.Purple.copy(alpha = 0.3f) else A2Theme.Ink850)
+                                    .border(1.dp, if (isUnderlayMode) A2Theme.Purple else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .clickable { onTogglePipUnderlay() }
+                                    .padding(horizontal = 7.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PictureInPicture,
+                                        contentDescription = "PiP Mode",
+                                        tint = if (isUnderlayMode) A2Theme.Purple else A2Theme.TextSecondary,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = if (isUnderlayMode) "Underlay" else "PiP Box",
+                                        color = if (isUnderlayMode) Color.White else A2Theme.TextPrimary,
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                         }
 
@@ -485,21 +572,114 @@ fun A2TimelineDock(
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.width(70.dp)
                         )
-                        Box(
+                        BoxWithConstraints(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(24.dp)
+                                .height(28.dp)
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(A2Theme.Purple.copy(alpha = 0.15f))
-                                .border(1.dp, A2Theme.Purple.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.CenterStart
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                         ) {
-                            Text(
-                                text = "docu_telescope_broll.mp4 (0.0s - 4.2s)",
-                                color = A2Theme.Purple,
-                                fontSize = 9.sp,
-                                fontFamily = FontFamily.Monospace
+                            val trackWidth = maxWidth
+                            val playPct = if (totalFrames > 1) currentFrame.toFloat() / (totalFrames - 1) else 0f
+
+                            if (videoClips.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    Text(
+                                        text = "No B-Roll clips on Track V1. Tap '+ Video Clip' to add.",
+                                        color = A2Theme.TextSecondary,
+                                        fontSize = 9.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            } else {
+                                videoClips.forEach { clip ->
+                                    val isSel = clip.id == selectedClipId
+                                    val startFraction = (clip.startPct / 100f).coerceIn(0f, 1f)
+                                    val endFraction = (clip.endPct / 100f).coerceIn(0f, 1f)
+                                    val clipWidthFraction = (endFraction - startFraction).coerceAtLeast(0.06f)
+
+                                    val clipLeft = trackWidth * startFraction
+                                    val clipW = trackWidth * clipWidthFraction
+                                    val clipColor = Color(clip.colorHex)
+
+                                    Box(
+                                        modifier = Modifier
+                                            .offset(x = clipLeft)
+                                            .width(clipW)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(5.dp))
+                                            .background(clipColor.copy(alpha = if (isSel) 0.95f else 0.75f))
+                                            .border(
+                                                if (isSel) 2.dp else 1.dp,
+                                                if (isSel) A2Theme.Amber else Color.White.copy(alpha = 0.3f),
+                                                RoundedCornerShape(5.dp)
+                                            )
+                                            .clickable { onSelectClip(clip.id) }
+                                            .padding(horizontal = 4.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // In Handle
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(width = 5.dp, height = 16.dp)
+                                                    .clip(RoundedCornerShape(2.dp))
+                                                    .background(Color.White.copy(alpha = 0.85f))
+                                                    .clickable { onTrimIn() }
+                                            )
+
+                                            // Title and Speed
+                                            Row(
+                                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = "🎬 ${clip.title}",
+                                                    color = Color.White,
+                                                    fontSize = 9.sp,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1
+                                                )
+                                                Text(
+                                                    text = "${clip.speed}x",
+                                                    color = A2Theme.Amber,
+                                                    fontSize = 8.sp,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            // Out Handle
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(width = 5.dp, height = 16.dp)
+                                                    .clip(RoundedCornerShape(2.dp))
+                                                    .background(Color.White.copy(alpha = 0.85f))
+                                                    .clickable { onTrimOut() }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Needle
+                            val playheadX = trackWidth * playPct.coerceIn(0f, 1f)
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = (playheadX - 1.dp).coerceAtLeast(0.dp))
+                                    .width(2.dp)
+                                    .fillMaxHeight()
+                                    .background(A2Theme.Amber)
                             )
                         }
                     }

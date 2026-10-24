@@ -82,6 +82,7 @@ fun A2TopTrayBar(
     onOpenWorkspaceSettings: () -> Unit,
     onOpenObjectLibrary: () -> Unit,
     onOpenExportModal: () -> Unit,
+    onOpenLogs: () -> Unit = {},
     onToggleZenMode: () -> Unit,
     onExportMp4: () -> Unit,
     modifier: Modifier = Modifier
@@ -356,6 +357,19 @@ fun A2TopTrayBar(
                         imageVector = Icons.Default.Widgets,
                         contentDescription = "Object Library",
                         tint = A2Theme.Purple,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+
+                // Logs Taker Modal Button
+                IconButton(
+                    onClick = onOpenLogs,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Timeline,
+                        contentDescription = "Studio Logs",
+                        tint = if (com.example.frameforge.log.AppLogger.hasCrashReport()) A2Theme.Rose else A2Theme.Amber,
                         modifier = Modifier.size(15.dp)
                     )
                 }

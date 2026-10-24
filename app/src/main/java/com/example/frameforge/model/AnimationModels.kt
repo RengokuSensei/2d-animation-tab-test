@@ -73,15 +73,42 @@ data class ObjectTransformTrack(
     )
 )
 
-// --- 4K / 30-MIN VIDEO ROTOSCOPING TRACK ---
+// --- 4K / 30-MIN VIDEO ROTOSCOPING & NLE B-ROLL TRACK ---
+
+data class A2VideoClip(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String = "docu_cut_1.mp4",
+    val startPct: Float = 0f,
+    val endPct: Float = 45f,
+    val speed: Float = 1.0f,
+    val colorHex: Long = 0xFF0EA5E9,
+    val isCustomVideo: Boolean = false,
+    val videoUri: String? = null
+)
+
+data class VideoPipTransform(
+    val x: Float = 36f,
+    val y: Float = 36f,
+    val width: Float = 380f,
+    val height: Float = 214f,
+    val rotation: Float = 0f,
+    val isVisible: Boolean = true,
+    val isUnderlayMode: Boolean = false // If true, renders full canvas background underlay
+)
 
 data class VideoRotoscopingTrack(
     val isEnabled: Boolean = true,
-    val videoTitle: String = "Athletic Run & Jump (Reference)",
-    val opacity: Float = 0.45f,
-    val isUnderlay: Boolean = true, // Rendered beneath sketch layers for tracing
+    val videoTitle: String = "B-Roll Reference Track",
+    val opacity: Float = 0.85f,
+    val isUnderlay: Boolean = false, // Rendered beneath sketch layers for tracing
     val totalVideoFrames: Int = 48,
-    val frameOffset: Int = 0
+    val frameOffset: Int = 0,
+    val clips: List<A2VideoClip> = listOf(
+        A2VideoClip(id = "vclip-1", title = "cosmic_nebula_broll.mp4", startPct = 0f, endPct = 45f, speed = 1.0f, colorHex = 0xFF3B82F6),
+        A2VideoClip(id = "vclip-2", title = "sun_core_cross_section.mp4", startPct = 50f, endPct = 100f, speed = 1.0f, colorHex = 0xFFEC4899)
+    ),
+    val selectedClipId: String? = "vclip-1",
+    val pipTransform: VideoPipTransform = VideoPipTransform()
 )
 
 // --- AUDIO TRACK & WAVEFORM ENGINE ---

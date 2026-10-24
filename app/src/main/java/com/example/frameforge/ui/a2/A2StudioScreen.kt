@@ -2,8 +2,12 @@ package com.example.frameforge.ui.a2
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.frameforge.log.AppLogger
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -128,13 +132,36 @@ fun A2StudioScreen(
     var isWorkspaceSettingsOpen by remember { mutableStateOf(false) }
     var isObjectLibraryOpen by remember { mutableStateOf(false) }
     var isExportModalOpen by remember { mutableStateOf(false) }
+    var isLogsModalOpen by remember { mutableStateOf(false) }
     var selectedPaperPreset by remember { mutableStateOf(CanvasPaperPreset.HEAVYWEIGHT) }
     var isCanvasLocked by remember { mutableStateOf(false) }
     var layerScope by remember { mutableStateOf(LayerScope.ALL) }
-    var fingerTouchMode by remember { mutableStateOf(FingerTouchMode.IGNORE) }
+    var fingerTouchMode by remember { mutableStateOf(FingerTouchMode.DRAW) }
 
-    BackHandler(enabled = isZenMode || isColorWheelOpen || isBrushesMarketOpen || isPdfShelfOpen || isPhotoInspectorOpen || isWorkspaceSettingsOpen || isObjectLibraryOpen || isExportModalOpen || currentMode != A2StudioMode.DRAW) {
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            var fileName = "imported_clip.mp4"
+            try {
+                if (uri.scheme == "content") {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (idx >= 0) fileName = cursor.getString(idx)
+                        }
+                    }
+                } else {
+                    uri.lastPathSegment?.let { fileName = it.substringAfterLast('/') }
+                }
+            } catch (_: Exception) {}
+            viewModel.importRealVideo(uri, fileName)
+        }
+    }
+
+    BackHandler(enabled = isZenMode || isColorWheelOpen || isBrushesMarketOpen || isPdfShelfOpen || isPhotoInspectorOpen || isWorkspaceSettingsOpen || isObjectLibraryOpen || isExportModalOpen || isLogsModalOpen || currentMode != A2StudioMode.DRAW) {
         if (isZenMode) isZenMode = false
+        else if (isLogsModalOpen) isLogsModalOpen = false
         else if (isColorWheelOpen) isColorWheelOpen = false
         else if (isBrushesMarketOpen) isBrushesMarketOpen = false
         else if (isPdfShelfOpen) isPdfShelfOpen = false
@@ -207,6 +234,7 @@ fun A2StudioScreen(
                     guideType = precisionGuideType,
                     isMeasureEnabled = isPrecisionMeasureEnabled,
                     palmRejectionMode = palmRejectionMode,
+                    fingerTouchMode = fingerTouchMode,
                     pressureCurve = pressureCurve,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
                     onUpdateStroke = { x, y, p -> viewModel.updateStroke(x, y, p) },
@@ -256,6 +284,7 @@ fun A2StudioScreen(
                 onOpenWorkspaceSettings = { isWorkspaceSettingsOpen = true },
                 onOpenObjectLibrary = { isObjectLibraryOpen = true },
                 onOpenExportModal = { isExportModalOpen = true },
+                onOpenLogs = { isLogsModalOpen = true },
                 onToggleZenMode = { isZenMode = true },
                 onExportMp4 = {
                     isExportingMp4 = true
@@ -349,11 +378,20 @@ fun A2StudioScreen(
                 },
                 isExpanded = isTimelineExpanded,
                 onToggleExpand = { isTimelineExpanded = !isTimelineExpanded },
-                onAddVideoClip = { Toast.makeText(context, "Added B-Roll PiP Clip to Track V1", Toast.LENGTH_SHORT).show() },
-                onRazorSplit = { Toast.makeText(context, "Razor Cut at Frame $currentFrame", Toast.LENGTH_SHORT).show() },
-                onTrimIn = { Toast.makeText(context, "In-Point set to Frame $currentFrame", Toast.LENGTH_SHORT).show() },
-                onTrimOut = { Toast.makeText(context, "Out-Point set to Frame $currentFrame", Toast.LENGTH_SHORT).show() },
-                onRippleDelete = { Toast.makeText(context, "Ripple Deleted Clip Segment", Toast.LENGTH_SHORT).show() },
+                videoClips = project.videoTrack.clips,
+                selectedClipId = project.videoTrack.selectedClipId,
+                onSelectClip = { viewModel.selectVideoClip(it) },
+                onAddVideoClip = { viewModel.addVideoClip() },
+                onImportRealVideo = { videoPickerLauncher.launch("video/*") },
+                onRazorSplit = { viewModel.splitVideoClip() },
+                onTrimIn = { viewModel.trimVideoClipIn() },
+                onTrimOut = { viewModel.trimVideoClipOut() },
+                onRippleDelete = { viewModel.rippleDeleteVideoClip() },
+                onCycleClipSpeed = { viewModel.cycleVideoClipSpeed() },
+                onTogglePipVisible = { viewModel.toggleVideoPipVisibility() },
+                onTogglePipUnderlay = { viewModel.toggleVideoUnderlayMode() },
+                isPipVisible = project.videoTrack.pipTransform.isVisible,
+                isUnderlayMode = project.videoTrack.pipTransform.isUnderlayMode,
                 onToggleRecordVoiceover = { isRecordingVoiceover = !isRecordingVoiceover },
                 isRecordingVoiceover = isRecordingVoiceover,
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -369,11 +407,13 @@ fun A2StudioScreen(
                 },
                 fingerTouchMode = fingerTouchMode,
                 onToggleFingerMode = {
-                    fingerTouchMode = when (fingerTouchMode) {
-                        FingerTouchMode.IGNORE -> FingerTouchMode.PAN
-                        FingerTouchMode.PAN -> FingerTouchMode.DRAW
-                        FingerTouchMode.DRAW -> FingerTouchMode.IGNORE
+                    val nextMode = when (fingerTouchMode) {
+                        FingerTouchMode.DRAW -> FingerTouchMode.PAN
+                        FingerTouchMode.PAN -> FingerTouchMode.IGNORE
+                        FingerTouchMode.IGNORE -> FingerTouchMode.DRAW
                     }
+                    fingerTouchMode = nextMode
+                    AppLogger.ui("FINGER_MODE_TOGGLED", nextMode.name)
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -612,6 +652,7 @@ fun A2StudioScreen(
                 onPalmModeChange = { viewModel.setPalmRejectionMode(it) },
                 pressureCurve = pressureCurve,
                 onPressureCurveChange = { viewModel.setPressureCurve(it) },
+                onOpenLogsModal = { isLogsModalOpen = true },
                 onClose = { isWorkspaceSettingsOpen = false }
             )
         }
@@ -725,6 +766,13 @@ fun A2StudioScreen(
                     }
                 }
             }
+        }
+
+        // 14. LOGS TAKER & CRASH FORENSICS MODAL
+        if (isLogsModalOpen) {
+            A2LogsModal(
+                onDismissRequest = { isLogsModalOpen = false }
+            )
         }
     }
 }

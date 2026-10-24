@@ -12,6 +12,9 @@ import com.example.frameforge.engine.DrawingEngine
 import com.example.frameforge.engine.InverseKinematics
 import com.example.frameforge.engine.ProceduralMotion
 import com.example.frameforge.export.ProjectStorage
+import com.example.frameforge.log.AppLogger
+import com.example.frameforge.model.A2VideoClip
+import com.example.frameforge.model.VideoPipTransform
 import com.example.frameforge.model.AnimationLayer
 import com.example.frameforge.model.AnimationProject
 import com.example.frameforge.model.BoneKeyframe
@@ -137,7 +140,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _brushSmoothing = MutableStateFlow(0.4f)
     val brushSmoothing: StateFlow<Float> = _brushSmoothing.asStateFlow()
 
-    private val _palmRejectionMode = MutableStateFlow(PalmRejectionMode.AUTOMATIC)
+    private val _palmRejectionMode = MutableStateFlow(PalmRejectionMode.FINGER_AND_STYLUS)
     val palmRejectionMode: StateFlow<PalmRejectionMode> = _palmRejectionMode.asStateFlow()
 
     private val _pressureCurve = MutableStateFlow(PressureCurve.LINEAR)
@@ -390,7 +393,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private fun createInitialProject(): AnimationProject {
         val proj = AnimationProject(
             name = "Studio Sequence 01",
-            totalFrames = 16,
+            totalFrames = 24,
             fps = 12
         )
         // Pre-create initial cels for layers
@@ -545,8 +548,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Frame & Playback ---
     fun setCurrentFrame(frame: Int) {
-        val clamped = frame.coerceIn(0, (_project.value.totalFrames - 1).coerceAtLeast(0))
+        val total = _project.value.totalFrames
+        val clamped = frame.coerceIn(0, (total - 1).coerceAtLeast(0))
         _currentFrame.value = clamped
+        AppLogger.playback("SELECT_FRAME", "Frame ${clamped + 1}/$total")
     }
 
     fun stepFrame(delta: Int) {
@@ -554,6 +559,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if (total <= 0) return
         val next = (_currentFrame.value + delta + total) % total
         _currentFrame.value = next
+        AppLogger.playback("STEP_FRAME", "Delta $delta -> Frame ${next + 1}/$total")
     }
 
     fun togglePlayback() {
@@ -566,25 +572,31 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun startPlayback() {
         _isPlaying.value = true
+        val total = _project.value.totalFrames
+        val fps = _project.value.fps.coerceIn(1, 60)
+        AppLogger.playback("PLAY_START", "FPS: $fps, TotalFrames: $total, Mode: ${_playbackMode.value.name}")
         playbackJob?.cancel()
         playbackJob = viewModelScope.launch {
-            val fps = _project.value.fps.coerceIn(1, 60)
-            val frameDelay = (1000L / fps).coerceAtLeast(16L)
             var forward = true
 
             while (isActive && _isPlaying.value) {
+                val currentFps = _project.value.fps.coerceIn(1, 60)
+                val frameDelay = (1000L / currentFps).coerceAtLeast(16L)
                 delay(frameDelay)
-                val total = _project.value.totalFrames
-                if (total <= 1) continue
+                if (!_isPlaying.value) break
+
+                val frameCount = _project.value.totalFrames
+                if (frameCount <= 1) continue
 
                 val curr = _currentFrame.value
                 when (_playbackMode.value) {
                     PlaybackMode.LOOP -> {
-                        _currentFrame.value = (curr + 1) % total
+                        _currentFrame.value = (curr + 1) % frameCount
                     }
                     PlaybackMode.ONCE -> {
-                        if (curr + 1 >= total) {
+                        if (curr + 1 >= frameCount) {
                             _isPlaying.value = false
+                            AppLogger.playback("PLAY_STOP_ONCE", "Reached final frame $frameCount")
                             break
                         } else {
                             _currentFrame.value = curr + 1
@@ -592,16 +604,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     PlaybackMode.PING_PONG -> {
                         if (forward) {
-                            if (curr + 1 >= total) {
+                            if (curr + 1 >= frameCount) {
                                 forward = false
-                                _currentFrame.value = curr - 1
+                                _currentFrame.value = (curr - 1).coerceAtLeast(0)
                             } else {
                                 _currentFrame.value = curr + 1
                             }
                         } else {
                             if (curr - 1 < 0) {
                                 forward = true
-                                _currentFrame.value = curr + 1
+                                _currentFrame.value = (curr + 1).coerceAtMost(frameCount - 1)
                             } else {
                                 _currentFrame.value = curr - 1
                             }
@@ -616,12 +628,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _isPlaying.value = false
         playbackJob?.cancel()
         playbackJob = null
+        AppLogger.playback("PLAY_STOP", "Stopped at frame ${_currentFrame.value + 1}")
     }
 
     fun setFps(fps: Int) {
         val clamped = fps.coerceIn(1, 60)
         _project.update { it.copy(fps = clamped) }
+        AppLogger.playback("FPS_SET", "$clamped fps")
         showStatus("Playback FPS set to $clamped")
+        if (_isPlaying.value) {
+            startPlayback()
+        }
     }
 
     fun addFrame() {
@@ -1440,6 +1457,211 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(videoTrack = it.videoTrack.copy(isUnderlay = !it.videoTrack.isUnderlay))
         }
         showStatus(if (_project.value.videoTrack.isUnderlay) "Video Under Drawing (Trace Mode)" else "Video Over Drawing")
+    }
+
+    // --- NLE VIDEO TRACK & B-ROLL PiP ENGINE ---
+
+    fun addVideoClip(title: String? = null, startPct: Float? = null, endPct: Float? = null) {
+        pushHistory()
+        val currentClips = _project.value.videoTrack.clips
+        val nextIdx = currentClips.size + 1
+        val clipTitle = title ?: "docu_cut_$nextIdx.mp4"
+
+        val lastEnd = currentClips.maxOfOrNull { it.endPct } ?: 0f
+        val computedStart = startPct ?: if (lastEnd < 85f) lastEnd + 2f else 15f
+        val computedEnd = endPct ?: (computedStart + 35f).coerceAtMost(100f)
+
+        val colors = listOf(0xFF0EA5E9, 0xFFA855F7, 0xFF10B981, 0xFFF59E0B, 0xFFEC4899, 0xFF6366F1)
+        val colorHex = colors[(nextIdx - 1) % colors.size]
+
+        val newClip = A2VideoClip(
+            title = clipTitle,
+            startPct = computedStart,
+            endPct = computedEnd,
+            speed = 1.0f,
+            colorHex = colorHex
+        )
+
+        _project.update { p ->
+            val updated = p.videoTrack.copy(
+                isEnabled = true,
+                clips = p.videoTrack.clips + newClip,
+                selectedClipId = newClip.id,
+                pipTransform = p.videoTrack.pipTransform.copy(isVisible = true)
+            )
+            p.copy(videoTrack = updated)
+        }
+
+        AppLogger.video("ADD_CLIP", "Added '${newClip.title}' [${newClip.startPct.toInt()}% - ${newClip.endPct.toInt()}%]")
+        showStatus("Added B-Roll Clip: ${newClip.title}")
+    }
+
+    fun importRealVideo(uri: Uri, fileName: String) {
+        pushHistory()
+        val newClip = A2VideoClip(
+            title = fileName,
+            startPct = 0f,
+            endPct = 100f,
+            speed = 1.0f,
+            colorHex = 0xFF10B981,
+            isCustomVideo = true,
+            videoUri = uri.toString()
+        )
+
+        _project.update { p ->
+            val updated = p.videoTrack.copy(
+                isEnabled = true,
+                clips = p.videoTrack.clips + newClip,
+                selectedClipId = newClip.id,
+                pipTransform = p.videoTrack.pipTransform.copy(isVisible = true)
+            )
+            p.copy(videoTrack = updated)
+        }
+
+        AppLogger.video("IMPORT_REAL_VIDEO", "Imported video '$fileName' (URI: $uri)")
+        showStatus("Imported Video: $fileName")
+    }
+
+    fun selectVideoClip(clipId: String) {
+        _project.update { p ->
+            p.copy(videoTrack = p.videoTrack.copy(selectedClipId = clipId))
+        }
+        AppLogger.video("SELECT_CLIP", "Selected clip: $clipId")
+    }
+
+    fun splitVideoClip(clipId: String? = null, atPct: Float? = null) {
+        pushHistory()
+        val track = _project.value.videoTrack
+        val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
+        val clip = track.clips.find { it.id == targetId } ?: return
+
+        val splitPoint = atPct ?: ((clip.startPct + clip.endPct) / 2f)
+        if (splitPoint <= clip.startPct + 3f || splitPoint >= clip.endPct - 3f) {
+            showStatus("Cannot split at edge of clip")
+            return
+        }
+
+        val origEnd = clip.endPct
+        val firstClip = clip.copy(endPct = splitPoint - 1f)
+        val secondClip = clip.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            title = if (clip.title.contains('.')) clip.title.replace(".mp4", "_B.mp4") else "${clip.title}_B",
+            startPct = splitPoint + 1f,
+            endPct = origEnd,
+            colorHex = 0xFFA855F7
+        )
+
+        val updatedClips = track.clips.map { if (it.id == clip.id) firstClip else it } + secondClip
+        _project.update { p ->
+            p.copy(videoTrack = p.videoTrack.copy(clips = updatedClips, selectedClipId = secondClip.id))
+        }
+
+        AppLogger.video("SPLIT_CLIP", "Split '${clip.title}' at ${splitPoint.toInt()}% into two clips")
+        showStatus("Split Clip at ${splitPoint.toInt()}%")
+    }
+
+    fun trimVideoClipIn(clipId: String? = null, deltaPct: Float = 6f) {
+        pushHistory()
+        val track = _project.value.videoTrack
+        val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
+        val clip = track.clips.find { it.id == targetId } ?: return
+
+        val newStart = (clip.startPct + deltaPct).coerceAtMost(clip.endPct - 5f)
+        val updated = clip.copy(startPct = newStart)
+
+        _project.update { p ->
+            p.copy(videoTrack = p.videoTrack.copy(clips = p.videoTrack.clips.map { if (it.id == targetId) updated else it }))
+        }
+        AppLogger.video("TRIM_IN", "Trimmed In to ${newStart.toInt()}%")
+        showStatus("Trimmed In: ${newStart.toInt()}%")
+    }
+
+    fun trimVideoClipOut(clipId: String? = null, deltaPct: Float = 6f) {
+        pushHistory()
+        val track = _project.value.videoTrack
+        val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
+        val clip = track.clips.find { it.id == targetId } ?: return
+
+        val newEnd = (clip.endPct - deltaPct).coerceAtLeast(clip.startPct + 5f)
+        val updated = clip.copy(endPct = newEnd)
+
+        _project.update { p ->
+            p.copy(videoTrack = p.videoTrack.copy(clips = p.videoTrack.clips.map { if (it.id == targetId) updated else it }))
+        }
+        AppLogger.video("TRIM_OUT", "Trimmed Out to ${newEnd.toInt()}%")
+        showStatus("Trimmed Out: ${newEnd.toInt()}%")
+    }
+
+    fun rippleDeleteVideoClip(clipId: String? = null) {
+        pushHistory()
+        val track = _project.value.videoTrack
+        val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
+        val targetIdx = track.clips.indexOfFirst { it.id == targetId }
+        if (targetIdx == -1) return
+
+        val removed = track.clips[targetIdx]
+        val gap = (removed.endPct - removed.startPct).coerceAtLeast(0f)
+
+        val remaining = track.clips.filterIndexed { idx, _ -> idx != targetIdx }.mapIndexed { idx, c ->
+            if (idx >= targetIdx) {
+                c.copy(
+                    startPct = (c.startPct - gap).coerceAtLeast(0f),
+                    endPct = (c.endPct - gap).coerceAtLeast(5f)
+                )
+            } else c
+        }
+
+        val nextSelectedId = remaining.getOrNull(targetIdx.coerceAtMost(remaining.size - 1))?.id
+
+        _project.update { p ->
+            p.copy(videoTrack = p.videoTrack.copy(clips = remaining, selectedClipId = nextSelectedId))
+        }
+
+        AppLogger.video("RIPPLE_DELETE", "Deleted '${removed.title}', rippled left by ${gap.toInt()}%")
+        showStatus("Ripple Deleted: ${removed.title}")
+    }
+
+    fun cycleVideoClipSpeed(clipId: String? = null) {
+        pushHistory()
+        val track = _project.value.videoTrack
+        val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
+        val clip = track.clips.find { it.id == targetId } ?: return
+
+        val nextSpeed = when (clip.speed) {
+            0.5f -> 1.0f
+            1.0f -> 1.5f
+            1.5f -> 2.0f
+            2.0f -> 0.5f
+            else -> 1.0f
+        }
+
+        val updated = clip.copy(speed = nextSpeed)
+        _project.update { p ->
+            p.copy(videoTrack = p.videoTrack.copy(clips = p.videoTrack.clips.map { if (it.id == targetId) updated else it }))
+        }
+
+        AppLogger.video("SET_SPEED", "Set speed of '${clip.title}' to ${nextSpeed}x")
+        showStatus("Clip Speed: ${nextSpeed}x")
+    }
+
+    fun toggleVideoPipVisibility() {
+        _project.update { p ->
+            val cur = p.videoTrack.pipTransform.isVisible
+            p.copy(videoTrack = p.videoTrack.copy(pipTransform = p.videoTrack.pipTransform.copy(isVisible = !cur)))
+        }
+        val isNowVis = _project.value.videoTrack.pipTransform.isVisible
+        AppLogger.video("PIP_VISIBILITY", "PiP Box Visible: $isNowVis")
+        showStatus(if (isNowVis) "PiP Stage Box Visible" else "PiP Stage Box Hidden")
+    }
+
+    fun toggleVideoUnderlayMode() {
+        _project.update { p ->
+            val cur = p.videoTrack.pipTransform.isUnderlayMode
+            p.copy(videoTrack = p.videoTrack.copy(pipTransform = p.videoTrack.pipTransform.copy(isUnderlayMode = !cur)))
+        }
+        val isUnderlay = _project.value.videoTrack.pipTransform.isUnderlayMode
+        AppLogger.video("PIP_UNDERLAY_MODE", "Full Underlay Mode: $isUnderlay")
+        showStatus(if (isUnderlay) "Video Mode: Full Canvas Underlay (Trace)" else "Video Mode: Floating PiP Window")
     }
 
     // --- MULTI-PAGE PDF IMPORT STUDIO & KEYFRAME ENGINE ---
