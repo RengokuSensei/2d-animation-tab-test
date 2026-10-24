@@ -1146,7 +1146,7 @@ object DrawingEngine {
                 canvas.drawCircle(cx, cy - 180f, 8f, handlePaint)
                 canvas.drawCircle(cx, cy + 180f, 8f, handlePaint)
             }
-            GuideType.RECTANGLE -> {
+            GuideType.RECT -> {
                 val rect = RectF(cx - 250f, cy - 180f, cx + 250f, cy + 180f)
                 canvas.drawRect(rect, guidePaint)
                 canvas.drawCircle(rect.left, rect.top, 8f, handlePaint)
