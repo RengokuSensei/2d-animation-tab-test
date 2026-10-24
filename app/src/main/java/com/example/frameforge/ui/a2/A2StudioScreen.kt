@@ -124,12 +124,24 @@ fun A2StudioScreen(
     // Export State
     var isExportingMp4 by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = isZenMode || isColorWheelOpen || isBrushesMarketOpen || isPdfShelfOpen || isPhotoInspectorOpen || currentMode != A2StudioMode.DRAW) {
+    // Concepts Drawer & Modal states
+    var isWorkspaceSettingsOpen by remember { mutableStateOf(false) }
+    var isObjectLibraryOpen by remember { mutableStateOf(false) }
+    var isExportModalOpen by remember { mutableStateOf(false) }
+    var selectedPaperPreset by remember { mutableStateOf(CanvasPaperPreset.HEAVYWEIGHT) }
+    var isCanvasLocked by remember { mutableStateOf(false) }
+    var layerScope by remember { mutableStateOf(LayerScope.ALL) }
+    var fingerTouchMode by remember { mutableStateOf(FingerTouchMode.IGNORE) }
+
+    BackHandler(enabled = isZenMode || isColorWheelOpen || isBrushesMarketOpen || isPdfShelfOpen || isPhotoInspectorOpen || isWorkspaceSettingsOpen || isObjectLibraryOpen || isExportModalOpen || currentMode != A2StudioMode.DRAW) {
         if (isZenMode) isZenMode = false
         else if (isColorWheelOpen) isColorWheelOpen = false
         else if (isBrushesMarketOpen) isBrushesMarketOpen = false
         else if (isPdfShelfOpen) isPdfShelfOpen = false
         else if (isPhotoInspectorOpen) isPhotoInspectorOpen = false
+        else if (isWorkspaceSettingsOpen) isWorkspaceSettingsOpen = false
+        else if (isObjectLibraryOpen) isObjectLibraryOpen = false
+        else if (isExportModalOpen) isExportModalOpen = false
         else if (currentMode != A2StudioMode.DRAW) currentMode = A2StudioMode.DRAW
     }
 
@@ -150,7 +162,7 @@ fun A2StudioScreen(
                     .fillMaxSize(0.96f)
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSceneBgVisible) A2Theme.StageBackdropGradient else SolidColor(A2Theme.Ink900))
+                    .background(if (isSceneBgVisible) SolidColor(selectedPaperPreset.color) else SolidColor(A2Theme.Ink900))
                     .border(1.dp, A2Theme.GlassBorder, RoundedCornerShape(16.dp))
             ) {
                 // PDF Reference Staged Layer (underneath drawing)
@@ -187,7 +199,7 @@ fun A2StudioScreen(
                     onionSkinConfig = onionSkinConfig,
                     selectedBoneId = null,
                     isIkMode = false,
-                    isCanvasLocked = false,
+                    isCanvasLocked = isCanvasLocked,
                     palmRejectionMode = palmRejectionMode,
                     pressureCurve = pressureCurve,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
@@ -235,6 +247,9 @@ fun A2StudioScreen(
                 rotationAngle = canvasRotationAngle,
                 onRotateCanvas = { canvasRotationAngle = (canvasRotationAngle + 15f) % 360f },
                 onOpenStylusSettings = { isStylusModalOpen = true },
+                onOpenWorkspaceSettings = { isWorkspaceSettingsOpen = true },
+                onOpenObjectLibrary = { isObjectLibraryOpen = true },
+                onOpenExportModal = { isExportModalOpen = true },
                 onToggleZenMode = { isZenMode = true },
                 onExportMp4 = {
                     isExportingMp4 = true
@@ -329,6 +344,43 @@ fun A2StudioScreen(
                 onToggleRecordVoiceover = { isRecordingVoiceover = !isRecordingVoiceover },
                 isRecordingVoiceover = isRecordingVoiceover,
                 modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
+            // 4b. CONCEPTS PALM REJECTION & LAYER SCOPE BAR (Bottom Center above Scrubber)
+            A2PalmRejectBar(
+                isCanvasLocked = isCanvasLocked,
+                onToggleCanvasLock = { isCanvasLocked = !isCanvasLocked },
+                layerScope = layerScope,
+                onToggleLayerScope = {
+                    layerScope = if (layerScope == LayerScope.ACTIVE) LayerScope.ALL else LayerScope.ACTIVE
+                },
+                fingerTouchMode = fingerTouchMode,
+                onToggleFingerMode = {
+                    fingerTouchMode = when (fingerTouchMode) {
+                        FingerTouchMode.IGNORE -> FingerTouchMode.PAN
+                        FingerTouchMode.PAN -> FingerTouchMode.DRAW
+                        FingerTouchMode.DRAW -> FingerTouchMode.IGNORE
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = if (isTimelineExpanded) (-168).dp else (-52).dp)
+            )
+
+            // 4c. CONCEPTS MINI RADAR NAVIGATOR (Bottom Left above Scrubber)
+            A2MiniNavigator(
+                onResetZoom = {
+                    Toast.makeText(context, "Canvas Reset to 100% Fit", Toast.LENGTH_SHORT).show()
+                },
+                onShare = {
+                    isExportModalOpen = true
+                },
+                onToggleTools = {
+                    isBrushesMarketOpen = !isBrushesMarketOpen
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = 14.dp, y = if (isTimelineExpanded) (-180).dp else (-64).dp)
             )
         }
 
@@ -528,6 +580,72 @@ fun A2StudioScreen(
                     isTextModalOpen = false
                 },
                 onCancel = { isTextModalOpen = false }
+            )
+        }
+
+        // 11b. CONCEPTS WORKSPACE & INTERACTION SETTINGS DRAWER
+        AnimatedVisibility(
+            visible = isWorkspaceSettingsOpen,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-14).dp, y = 56.dp)
+        ) {
+            A2SettingsDrawer(
+                paperPreset = selectedPaperPreset,
+                onSelectPaperPreset = { selectedPaperPreset = it },
+                palmMode = palmRejectionMode,
+                onPalmModeChange = { viewModel.setPalmRejectionMode(it) },
+                pressureCurve = pressureCurve,
+                onPressureCurveChange = { viewModel.setPressureCurve(it) },
+                onClose = { isWorkspaceSettingsOpen = false }
+            )
+        }
+
+        // 11c. CONCEPTS OBJECT LIBRARY DRAWER
+        AnimatedVisibility(
+            visible = isObjectLibraryOpen,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-14).dp, y = 56.dp)
+        ) {
+            A2ObjectLibraryDrawer(
+                onSelectObject = { objName ->
+                    Toast.makeText(context, "Placed Object: $objName on Cel $currentFrame", Toast.LENGTH_SHORT).show()
+                    isObjectLibraryOpen = false
+                },
+                onClose = { isObjectLibraryOpen = false }
+            )
+        }
+
+        // 11d. CONCEPTS MULTI-FORMAT EXPORT MODAL (MP4, PNG, SVG, DXF, JPG)
+        if (isExportModalOpen) {
+            A2ExportModal(
+                onTriggerExport = { format, region, incBg, incGrid, scale ->
+                    isExportModalOpen = false
+                    if (format == ExportFormat.MP4) {
+                        isExportingMp4 = true
+                        viewModel.exportMp4 { file ->
+                            isExportingMp4 = false
+                            if (file != null && file.exists()) {
+                                Toast.makeText(context, "Exported MP4: ${file.name}", Toast.LENGTH_LONG).show()
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "video/mp4"
+                                    putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file))
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Share MP4 Animation"))
+                            } else {
+                                Toast.makeText(context, "Export completed to Movies/FrameForge", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        Toast.makeText(context, "Exported ${format.label} ($region, ${scale}%)", Toast.LENGTH_LONG).show()
+                    }
+                },
+                onClose = { isExportModalOpen = false }
             )
         }
 

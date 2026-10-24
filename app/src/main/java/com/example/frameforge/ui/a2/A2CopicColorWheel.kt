@@ -266,6 +266,32 @@ fun A2CopicColorWheel(
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            // Concepts Monochrome Grayscale Swatches Strip (White, C1, C5, C9, Black)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    CopicSwatch("0", "Pure White", Color.White),
+                    CopicSwatch("C1", "Cool Gray 1", Color(0xFFE2E8F0)),
+                    CopicSwatch("C5", "Cool Gray 5", Color(0xFF94A3B8)),
+                    CopicSwatch("C9", "Cool Gray 9", Color(0xFF334155)),
+                    CopicSwatch("100", "Deep Black", Color(0xFF0F172A))
+                ).forEach { gray ->
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(gray.color)
+                            .border(1.dp, A2Theme.GlassBorder, CircleShape)
+                            .clickable {
+                                activeCopicLabel = "${gray.code} · ${gray.name}"
+                                onSelectColor(gray.color)
+                            }
+                    )
+                }
+            }
         }
     }
 }

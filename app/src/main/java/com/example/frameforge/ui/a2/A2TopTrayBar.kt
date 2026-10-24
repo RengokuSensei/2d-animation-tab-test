@@ -25,12 +25,14 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -77,6 +79,9 @@ fun A2TopTrayBar(
     rotationAngle: Float,
     onRotateCanvas: () -> Unit,
     onOpenStylusSettings: () -> Unit,
+    onOpenWorkspaceSettings: () -> Unit,
+    onOpenObjectLibrary: () -> Unit,
+    onOpenExportModal: () -> Unit,
     onToggleZenMode: () -> Unit,
     onExportMp4: () -> Unit,
     modifier: Modifier = Modifier
@@ -342,6 +347,32 @@ fun A2TopTrayBar(
                     )
                 }
 
+                // Object Library Button
+                IconButton(
+                    onClick = onOpenObjectLibrary,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Widgets,
+                        contentDescription = "Object Library",
+                        tint = A2Theme.Purple,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+
+                // Workspace & Interaction Settings Button
+                IconButton(
+                    onClick = onOpenWorkspaceSettings,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Workspace Settings",
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+
                 // Fullscreen Zen Mode Button
                 IconButton(
                     onClick = onToggleZenMode,
@@ -352,6 +383,19 @@ fun A2TopTrayBar(
                         contentDescription = "Zen Mode",
                         tint = Color.White,
                         modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // Concepts Multi-Format Export Dialog Button
+                IconButton(
+                    onClick = onOpenExportModal,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Export Formats",
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
 
