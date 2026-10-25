@@ -417,24 +417,30 @@ fun A2StudioScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = if (isTimelineExpanded) (-168).dp else (-52).dp)
+                    .offset(y = if (isTimelineExpanded) (-264).dp else (-54).dp)
             )
 
-            // 4c. CONCEPTS MINI RADAR NAVIGATOR (Bottom Left above Scrubber)
-            A2MiniNavigator(
-                onResetZoom = {
-                    Toast.makeText(context, "Canvas Reset to 100% Fit", Toast.LENGTH_SHORT).show()
-                },
-                onShare = {
-                    isExportModalOpen = true
-                },
-                onToggleTools = {
-                    isBrushesMarketOpen = !isBrushesMarketOpen
-                },
+            // 4c. CONCEPTS MINI RADAR NAVIGATOR (Bottom Left above Scrubber; hidden when NLE is expanded)
+            AnimatedVisibility(
+                visible = !isTimelineExpanded,
+                enter = fadeIn(),
+                exit = fadeOut(),
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .offset(x = 14.dp, y = if (isTimelineExpanded) (-180).dp else (-64).dp)
-            )
+                    .offset(x = 14.dp, y = (-58).dp)
+            ) {
+                A2MiniNavigator(
+                    onResetZoom = {
+                        Toast.makeText(context, "Canvas Reset to 100% Fit", Toast.LENGTH_SHORT).show()
+                    },
+                    onShare = {
+                        isExportModalOpen = true
+                    },
+                    onToggleTools = {
+                        isBrushesMarketOpen = !isBrushesMarketOpen
+                    }
+                )
+            }
         }
 
         // 5. CONCENTRIC COPIC COLOR WHEEL OVERLAY

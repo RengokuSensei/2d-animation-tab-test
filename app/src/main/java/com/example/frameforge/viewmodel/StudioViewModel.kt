@@ -1535,8 +1535,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
         val clip = track.clips.find { it.id == targetId } ?: return
 
-        val splitPoint = atPct ?: ((clip.startPct + clip.endPct) / 2f)
-        if (splitPoint <= clip.startPct + 3f || splitPoint >= clip.endPct - 3f) {
+        val playheadPct = atPct ?: run {
+            val total = _project.value.totalFrames
+            if (total > 1) (_currentFrame.value.toFloat() / (total - 1)) * 100f else 50f
+        }
+        val splitPoint = if (playheadPct in (clip.startPct + 3f)..(clip.endPct - 3f)) {
+            playheadPct
+        } else {
+            ((clip.startPct + clip.endPct) / 2f)
+        }
+        if (splitPoint <= clip.startPct + 2f || splitPoint >= clip.endPct - 2f) {
             showStatus("Cannot split at edge of clip")
             return
         }
@@ -1560,13 +1568,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         showStatus("Split Clip at ${splitPoint.toInt()}%")
     }
 
-    fun trimVideoClipIn(clipId: String? = null, deltaPct: Float = 6f) {
+    fun trimVideoClipIn(clipId: String? = null, atPlayheadPct: Float? = null) {
         pushHistory()
         val track = _project.value.videoTrack
         val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
         val clip = track.clips.find { it.id == targetId } ?: return
 
-        val newStart = (clip.startPct + deltaPct).coerceAtMost(clip.endPct - 5f)
+        val playheadPct = atPlayheadPct ?: run {
+            val total = _project.value.totalFrames
+            if (total > 1) (_currentFrame.value.toFloat() / (total - 1)) * 100f else 0f
+        }
+        val newStart = if (playheadPct in (clip.startPct + 1f)..(clip.endPct - 5f)) {
+            playheadPct
+        } else {
+            (clip.startPct + 6f).coerceAtMost(clip.endPct - 5f)
+        }
         val updated = clip.copy(startPct = newStart)
 
         _project.update { p ->
@@ -1576,13 +1592,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         showStatus("Trimmed In: ${newStart.toInt()}%")
     }
 
-    fun trimVideoClipOut(clipId: String? = null, deltaPct: Float = 6f) {
+    fun trimVideoClipOut(clipId: String? = null, atPlayheadPct: Float? = null) {
         pushHistory()
         val track = _project.value.videoTrack
         val targetId = clipId ?: track.selectedClipId ?: track.clips.firstOrNull()?.id ?: return
         val clip = track.clips.find { it.id == targetId } ?: return
 
-        val newEnd = (clip.endPct - deltaPct).coerceAtLeast(clip.startPct + 5f)
+        val playheadPct = atPlayheadPct ?: run {
+            val total = _project.value.totalFrames
+            if (total > 1) (_currentFrame.value.toFloat() / (total - 1)) * 100f else 100f
+        }
+        val newEnd = if (playheadPct in (clip.startPct + 5f)..(clip.endPct - 1f)) {
+            playheadPct
+        } else {
+            (clip.endPct - 6f).coerceAtLeast(clip.startPct + 5f)
+        }
         val updated = clip.copy(endPct = newEnd)
 
         _project.update { p ->

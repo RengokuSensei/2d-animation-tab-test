@@ -628,14 +628,20 @@ fun A2TimelineDock(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            // In Handle
+                                            // In Handle (Comfortable touch target with inner white pill)
                                             Box(
                                                 modifier = Modifier
-                                                    .size(width = 5.dp, height = 16.dp)
-                                                    .clip(RoundedCornerShape(2.dp))
-                                                    .background(Color.White.copy(alpha = 0.85f))
-                                                    .clickable { onTrimIn() }
-                                            )
+                                                    .size(width = 16.dp, height = 24.dp)
+                                                    .clickable { onTrimIn() },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 4.dp, height = 16.dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(Color.White.copy(alpha = 0.9f))
+                                                )
+                                            }
 
                                             // Title and Speed
                                             Row(
@@ -660,14 +666,20 @@ fun A2TimelineDock(
                                                 )
                                             }
 
-                                            // Out Handle
+                                            // Out Handle (Comfortable touch target with inner white pill)
                                             Box(
                                                 modifier = Modifier
-                                                    .size(width = 5.dp, height = 16.dp)
-                                                    .clip(RoundedCornerShape(2.dp))
-                                                    .background(Color.White.copy(alpha = 0.85f))
-                                                    .clickable { onTrimOut() }
-                                            )
+                                                    .size(width = 16.dp, height = 24.dp)
+                                                    .clickable { onTrimOut() },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 4.dp, height = 16.dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(Color.White.copy(alpha = 0.9f))
+                                                )
+                                            }
                                         }
                                     }
                                 }
