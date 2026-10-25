@@ -45,8 +45,8 @@ object RotoscopingEngine {
         } else 0f
 
         val activeClip = track.clips.find { playPct >= it.startPct && playPct <= it.endPct }
-            ?: if (track.selectedClipId != null) track.clips.find { it.id == track.selectedClipId }
-            else track.clips.firstOrNull() ?: return
+            ?: track.clips.find { it.id == track.selectedClipId }
+            ?: track.clips.firstOrNull() ?: return
 
         val isUnderlay = track.pipTransform.isUnderlayMode
         val dstRect = if (isUnderlay) {
