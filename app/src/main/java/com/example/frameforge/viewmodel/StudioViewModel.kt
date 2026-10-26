@@ -23,11 +23,13 @@ import com.example.frameforge.model.BonePose
 import com.example.frameforge.model.DrawingCel
 import com.example.frameforge.model.DrawingStroke
 import com.example.frameforge.model.EasingCurve
+import com.example.frameforge.model.ObjectTransformTrack
 import com.example.frameforge.model.OnionSkinConfig
 import com.example.frameforge.model.PlaybackMode
 import com.example.frameforge.model.SkeletonRig
 import com.example.frameforge.model.StrokePoint
 import com.example.frameforge.model.ToolType
+import com.example.frameforge.model.TransformKeyframe
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1047,7 +1049,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     totalFrames = p.totalFrames,
                     videoTrack = p.videoTrack,
                     colorGradingState = _colorGradingState.value,
-                    context = getApplication()
+                    context = getApplication(),
+                    objectTracks = p.objectTracks
                 )
             }
 
@@ -1091,7 +1094,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     totalFrames = p.totalFrames,
                     videoTrack = p.videoTrack,
                     colorGradingState = _colorGradingState.value,
-                    context = getApplication()
+                    context = getApplication(),
+                    objectTracks = p.objectTracks
                 )
                 val isJpg = (format == com.example.frameforge.ui.a2.ExportFormat.JPG)
                 val file = if (isJpg) {
@@ -2386,19 +2390,108 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateLayer3DDepth(layerId: String, z: Float, autoScaleComp: Boolean) {
+        updateLayerTransform3D(layerId = layerId, posZ = z, autoScaleComp = autoScaleComp)
+        showStatus("Layer Z-Depth: ${z.toInt()}px")
+    }
+
+    fun updateLayerTransform3D(
+        layerId: String,
+        offsetX: Float? = null,
+        offsetY: Float? = null,
+        posZ: Float? = null,
+        rotX: Float? = null,
+        rotY: Float? = null,
+        scale: Float? = null,
+        opacity: Float? = null,
+        autoScaleComp: Boolean? = null
+    ) {
         _project.update { p ->
             val updated = p.layers.map { l ->
-                if (l.id == layerId) l.copy(posZ = z, autoScaleComp = autoScaleComp) else l
+                if (l.id == layerId) {
+                    l.copy(
+                        offsetX = offsetX ?: l.offsetX,
+                        offsetY = offsetY ?: l.offsetY,
+                        posZ = posZ ?: l.posZ,
+                        rotX = rotX ?: l.rotX,
+                        rotY = rotY ?: l.rotY,
+                        scale = scale ?: l.scale,
+                        opacity = opacity ?: l.opacity,
+                        autoScaleComp = autoScaleComp ?: l.autoScaleComp
+                    )
+                } else l
             }
             p.copy(layers = updated)
         }
         _multiplaneStageState.update { st ->
             val updatedPlanes = st.layerPlanes.map { plane ->
-                if (plane.layerId == layerId) plane.copy(posZ = z, autoScaleCompensation = autoScaleComp) else plane
+                if (plane.layerId == layerId) {
+                    plane.copy(
+                        posZ = posZ ?: plane.posZ,
+                        rotX = rotX ?: plane.rotX,
+                        rotY = rotY ?: plane.rotY,
+                        autoScaleCompensation = autoScaleComp ?: plane.autoScaleCompensation
+                    )
+                } else plane
             }
             st.copy(layerPlanes = updatedPlanes)
         }
-        showStatus("Layer Z-Depth: ${z.toInt()}px")
+    }
+
+    fun bakeMultiplaneParallaxToProject(panDistanceX: Float = 240f, dollyDistanceZ: Float = 300f) {
+        val p = _project.value
+        val totalFrames = p.totalFrames.coerceAtLeast(2)
+        val layersWithDepth = p.layers.filter { kotlin.math.abs(it.posZ) > 1f }
+
+        if (layersWithDepth.isEmpty()) {
+            showStatus("All layers at Z=0. Adjust layer Z-depths first to bake 3D parallax.")
+            return
+        }
+
+        val updatedTracks = p.objectTracks.toMutableList()
+
+        layersWithDepth.forEach { layer ->
+            val depthRatio = (1000f / (1000f + layer.posZ).coerceAtLeast(100f))
+            val layerTravelX = -panDistanceX * depthRatio
+
+            val kfs = mutableListOf<TransformKeyframe>()
+            for (f in 0 until totalFrames) {
+                val t = f.toFloat() / (totalFrames - 1)
+                val easeT = (kotlin.math.sin((t - 0.5) * Math.PI).toFloat() + 1f) / 2f
+                val tx = (easeT - 0.5f) * layerTravelX
+                val relativeZ = layer.posZ - (easeT - 0.5f) * dollyDistanceZ
+                val scaleFactor = if (layer.autoScaleComp) {
+                    ((1000f + layer.posZ) / (1000f + relativeZ).coerceAtLeast(100f))
+                } else 1.0f
+
+                kfs.add(
+                    TransformKeyframe(
+                        frameIndex = f,
+                        translationX = tx,
+                        translationY = 0f,
+                        rotationDeg = 0f,
+                        scaleX = scaleFactor,
+                        scaleY = scaleFactor,
+                        opacity = layer.opacity,
+                        easing = EasingCurve.EASE_IN_OUT
+                    )
+                )
+            }
+
+            val existingIdx = updatedTracks.indexOfFirst { it.objectId == layer.id }
+            val newTrack = ObjectTransformTrack(
+                objectId = layer.id,
+                objectName = "${layer.name} 3D Parallax",
+                keyframes = kfs
+            )
+            if (existingIdx >= 0) {
+                updatedTracks[existingIdx] = newTrack
+            } else {
+                updatedTracks.add(newTrack)
+            }
+        }
+
+        _project.update { it.copy(objectTracks = updatedTracks) }
+        showStatus("✨ Baked 3D Parallax for ${layersWithDepth.size} layers across $totalFrames frames!")
     }
 
     fun toggleLayerOnionSkinPin(layerId: String) {

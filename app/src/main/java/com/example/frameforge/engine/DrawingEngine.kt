@@ -20,6 +20,7 @@ import com.example.frameforge.model.AdjustmentType
 import com.example.frameforge.model.AnimationLayer
 import com.example.frameforge.model.DrawingCel
 import com.example.frameforge.model.DrawingStroke
+import com.example.frameforge.model.ObjectTransformTrack
 import com.example.frameforge.model.OnionSkinConfig
 import com.example.frameforge.model.SelectionState
 import com.example.frameforge.model.StrokePoint
@@ -357,7 +358,8 @@ object DrawingEngine {
         totalFrames: Int = 24,
         videoTrack: VideoRotoscopingTrack? = null,
         colorGradingState: ColorGradingState? = null,
-        context: Context? = null
+        context: Context? = null,
+        objectTracks: List<ObjectTransformTrack>? = null
     ): Bitmap {
         val bmp = targetBitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -403,6 +405,26 @@ object DrawingEngine {
             if (!layer.isVisible) continue
             val cel = celsByLayer[layer.id] ?: continue
 
+            val track = objectTracks?.find { it.objectId == layer.id }
+            val kf = track?.keyframes?.find { it.frameIndex == frameIndex }
+            val tx = (kf?.translationX ?: 0f) + layer.offsetX
+            val ty = (kf?.translationY ?: 0f) + layer.offsetY
+            val rot = kf?.rotationDeg ?: 0f
+            val sx = (kf?.scaleX ?: 1f) * layer.scale
+            val sy = (kf?.scaleY ?: 1f) * layer.scale
+            val hasTransform = (tx != 0f || ty != 0f || rot != 0f || sx != 1f || sy != 1f)
+
+            if (hasTransform) {
+                canvas.save()
+                canvas.translate(tx, ty)
+                if (rot != 0f) {
+                    canvas.rotate(rot, width / 2f, height / 2f)
+                }
+                if (sx != 1f || sy != 1f) {
+                    canvas.scale(sx, sy, width / 2f, height / 2f)
+                }
+            }
+
             val mode = when (layer.blendMode) {
                 com.example.frameforge.model.BlendModeType.MULTIPLY -> PorterDuff.Mode.MULTIPLY
                 com.example.frameforge.model.BlendModeType.SCREEN -> PorterDuff.Mode.SCREEN
@@ -433,6 +455,10 @@ object DrawingEngine {
                 for (s in cel.strokes) {
                     renderStroke(canvas, s)
                 }
+            }
+
+            if (hasTransform) {
+                canvas.restore()
             }
         }
 

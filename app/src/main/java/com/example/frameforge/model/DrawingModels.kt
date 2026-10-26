@@ -86,7 +86,10 @@ data class AnimationLayer(
     val rotX: Float = 0f,
     val rotY: Float = 0f,
     val autoScaleComp: Boolean = true,
-    val onionSkinPinned: Boolean = false
+    val onionSkinPinned: Boolean = false,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val scale: Float = 1.0f
 )
 
 data class DrawingCel(

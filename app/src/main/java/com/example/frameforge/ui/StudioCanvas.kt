@@ -508,11 +508,36 @@ fun StudioCanvas(
                 for (layer in project.layers) {
                     if (!layer.isVisible) continue
                     val cel = celsByLayer[layer.id] ?: continue
+
+                    val track = project.objectTracks.find { it.objectId == layer.id }
+                    val kf = track?.keyframes?.find { it.frameIndex == currentFrame }
+                    val tx = (kf?.translationX ?: 0f) + layer.offsetX
+                    val ty = (kf?.translationY ?: 0f) + layer.offsetY
+                    val rot = kf?.rotationDeg ?: 0f
+                    val sx = (kf?.scaleX ?: 1f) * layer.scale
+                    val sy = (kf?.scaleY ?: 1f) * layer.scale
+                    val hasTransform = (tx != 0f || ty != 0f || rot != 0f || sx != 1f || sy != 1f)
+
+                    if (hasTransform) {
+                        nativeCanvas.save()
+                        nativeCanvas.translate(tx, ty)
+                        if (rot != 0f) {
+                            nativeCanvas.rotate(rot, project.canvasWidth / 2f, project.canvasHeight / 2f)
+                        }
+                        if (sx != 1f || sy != 1f) {
+                            nativeCanvas.scale(sx, sy, project.canvasWidth / 2f, project.canvasHeight / 2f)
+                        }
+                    }
+
                     for (stroke in cel.strokes) {
                         DrawingEngine.renderStroke(nativeCanvas, stroke)
                         if (isMeasureEnabled) {
                             DrawingEngine.renderMeasureTag(nativeCanvas, stroke)
                         }
+                    }
+
+                    if (hasTransform) {
+                        nativeCanvas.restore()
                     }
                 }
 

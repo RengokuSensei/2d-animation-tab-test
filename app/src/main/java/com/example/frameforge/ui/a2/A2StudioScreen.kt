@@ -629,7 +629,33 @@ fun A2StudioScreen(
             }
             A2StudioMode.STAGE_3D -> {
                 A2Stage3DOverlay(
-                    layers = project.layers,
+                    project = project,
+                    currentFrame = currentFrame,
+                    isPlaying = isPlaying,
+                    stagedPhotoBitmap = stagedPhotoBitmap,
+                    photoOpacity = photoOpacity,
+                    selectedLayerId = activeLayerId,
+                    onSelectLayer = { viewModel.setActiveLayer(it) },
+                    onSetCurrentFrame = { viewModel.setCurrentFrame(it) },
+                    onTogglePlayback = { viewModel.togglePlayback() },
+                    onUpdateLayerTransform = { id, ox, oy, pz, rx, ry, sc, op, asc ->
+                        viewModel.updateLayerTransform3D(
+                            layerId = id,
+                            offsetX = ox,
+                            offsetY = oy,
+                            posZ = pz,
+                            rotX = rx,
+                            rotY = ry,
+                            scale = sc,
+                            opacity = op,
+                            autoScaleComp = asc
+                        )
+                    },
+                    onToggleLayerVisibility = { viewModel.toggleLayerVisibility(it) },
+                    onToggleLayerLock = { viewModel.toggleLayerLock(it) },
+                    onBakeParallax = { pan, dolly ->
+                        viewModel.bakeMultiplaneParallaxToProject(pan, dolly)
+                    },
                     onDone = { currentMode = A2StudioMode.DRAW },
                     modifier = Modifier
                         .fillMaxSize()
