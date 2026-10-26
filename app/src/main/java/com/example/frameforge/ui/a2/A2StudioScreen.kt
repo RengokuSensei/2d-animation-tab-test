@@ -815,12 +815,12 @@ fun A2StudioScreen(
         // 11e. REAL PDF DOCUMENT IMPORT & CEL EXTRACTION DIALOG
         if (isPdfImportDialogOpen && pdfFile != null) {
             PdfImportDialog(
-                pdfFile = pdfFile!!,
-                pdfTitle = pdfDocumentTitle,
-                fps = project.fps,
+                pdfFile = pdfFile,
+                documentTitle = pdfDocumentTitle,
                 onDismiss = { viewModel.closePdfImportDialog() },
-                onImportPages = { pages, trackType, holdFrames, underlay ->
-                    viewModel.importPdfPages(pages, trackType, holdFrames, underlay)
+                onLoadSamplePdf = { viewModel.loadSamplePdfDocument() },
+                onConfirmImport = { file, config ->
+                    viewModel.commitPdfImport(file, config)
                 }
             )
         }

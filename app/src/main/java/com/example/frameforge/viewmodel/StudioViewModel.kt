@@ -2,6 +2,7 @@ package com.example.frameforge.viewmodel
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.AndroidViewModel

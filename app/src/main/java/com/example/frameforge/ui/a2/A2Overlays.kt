@@ -172,12 +172,11 @@ fun A2NodeCompositorOverlay(
             ) {
                 Text(text = "+ Add:", color = A2Theme.TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 listOf(
-                    AnimationNodeType.LAYER to "Layer",
-                    AnimationNodeType.BLEND to "Blend",
-                    AnimationNodeType.COLOR_GRADE to "Color Grade",
+                    AnimationNodeType.LAYER_SOURCE to "Layer",
                     AnimationNodeType.TRANSFORM to "Transform",
-                    AnimationNodeType.BLUR to "Blur",
-                    AnimationNodeType.OUTPUT to "Output"
+                    AnimationNodeType.COLOR_FX to "Color FX",
+                    AnimationNodeType.AI_MOTION to "AI Motion",
+                    AnimationNodeType.COMPOSITE_OUTPUT to "Output"
                 ).forEach { (type, label) ->
                     Box(
                         modifier = Modifier
@@ -220,13 +219,12 @@ fun A2NodeCompositorOverlay(
 
                 // Draggable Node Cards
                 graph.nodes.forEach { node ->
-                    val nodeColor = when (node.type) {
-                        AnimationNodeType.LAYER -> A2Theme.Mint
-                        AnimationNodeType.BLEND -> A2Theme.Accent
-                        AnimationNodeType.COLOR_GRADE -> A2Theme.Teal
+                    val nodeColor = when (node.nodeType) {
+                        AnimationNodeType.LAYER_SOURCE -> A2Theme.Mint
                         AnimationNodeType.TRANSFORM -> A2Theme.Amber
-                        AnimationNodeType.BLUR -> A2Theme.Rose
-                        AnimationNodeType.OUTPUT -> A2Theme.Purple
+                        AnimationNodeType.COLOR_FX -> A2Theme.Teal
+                        AnimationNodeType.AI_MOTION -> A2Theme.Rose
+                        AnimationNodeType.COMPOSITE_OUTPUT -> A2Theme.Purple
                     }
 
                     Box(
@@ -272,7 +270,7 @@ fun A2NodeCompositorOverlay(
                                 }
                             }
                             Text(
-                                text = "Type: ${node.type.name}",
+                                text = "Type: ${node.nodeType.name}",
                                 color = nodeColor,
                                 fontSize = 9.sp,
                                 fontFamily = FontFamily.Monospace
