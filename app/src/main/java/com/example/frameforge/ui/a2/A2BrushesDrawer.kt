@@ -54,13 +54,16 @@ data class BrushCatalogItem(
     val name: String,
     val category: String,
     val description: String,
-    val accentColor: Color
+    val accentColor: Color,
+    val defaultSize: Float = 6f,
+    val defaultOpacity: Float = 1.0f,
+    val defaultSmoothing: Float = 0.5f
 )
 
 @Composable
 fun A2BrushesDrawer(
     currentTool: ToolType,
-    onSelectTool: (ToolType) -> Unit,
+    onSelectTool: (ToolType, Float, Float, Float) -> Unit,
     activeColor: Color,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -69,25 +72,25 @@ fun A2BrushesDrawer(
 
     val brushCatalog = remember {
         listOf(
-            BrushCatalogItem(ToolType.PEN, "Studio Technical Pen", "Basics", "Uniform vector precision with sub-pixel Catmull-Rom smoothing", Color(0xFF898BFF)),
-            BrushCatalogItem(ToolType.INK, "Fountain Calligraphy", "Basics", "Expressive velocity-sensitive dynamic line width", Color(0xFF6366F1)),
-            BrushCatalogItem(ToolType.PENCIL, "Soft 2B Graphite", "Basics", "Authentic grainy graphite texture with tilt shading", Color(0xFF94A3B8)),
-            BrushCatalogItem(ToolType.CHARCOAL, "Fixed Width Wire", "Basics", "Continuous uniform vector stroke for wireframe schematics", Color(0xFF64748B)),
-            BrushCatalogItem(ToolType.WATERCOLOR, "Layered Watercolor Wash", "Artistic", "Semi-transparent fluid pigment with edge pooling", Color(0xFF2DD4BF)),
-            BrushCatalogItem(ToolType.BRUSH, "Oils & Acrylic Impasto", "Artistic", "Rich blended brush with textural bristle tracks", Color(0xFF4ECCA3)),
-            BrushCatalogItem(ToolType.AIRBRUSH, "Soft Airbrush Mist", "Artistic", "Feathered gradient mist for glow and ambient lighting", Color(0xFFFFBF69)),
-            BrushCatalogItem(ToolType.FILL, "ColorDrop Flood Fill", "Tools", "Scanline flood fill with edge tolerance", Color(0xFFEF6461)),
-            BrushCatalogItem(ToolType.LASSO, "Lasso Selection", "Tools", "Freehand lasso bounding box to move and scale elements", Color(0xFF38BDF8)),
-            BrushCatalogItem(ToolType.TRANSFORM, "Nudge & Warp", "Tools", "Push and stretch vector strokes like wire", Color(0xFFF59E0B)),
-            BrushCatalogItem(ToolType.SOFT_ERASER, "Slice Knife", "Tools", "Slice through vector lines to trim segments", Color(0xFFEC4899)),
-            BrushCatalogItem(ToolType.ERASER, "Hard Mask", "Tools", "Clean vector erase and stroke carving", Color(0xFF94A3B8)),
-            BrushCatalogItem(ToolType.PEN, "Crosshatching Fine Pen", "Brush Market", "Multi-stroke hatching for architectural depth", Color(0xFF818CF8)),
-            BrushCatalogItem(ToolType.CHARCOAL, "Ink & Sponge Blot", "Brush Market", "Textured organic ink blots and spatter", Color(0xFF34D399)),
-            BrushCatalogItem(ToolType.PIXEL, "Halftone Comic Dots", "Brush Market", "Classic pop-art offset printing screen dots", Color(0xFFF472B6)),
-            BrushCatalogItem(ToolType.PENCIL, "Wood Parquet Tiling", "Brush Market", "Procedural wood texture fill", Color(0xFFD97706)),
-            BrushCatalogItem(ToolType.PEN, "Architectural Slat Wall", "Brush Market", "Precision parallel facade slat texture", Color(0xFFA78BFA)),
-            BrushCatalogItem(ToolType.HIGHLIGHTER, "Smart Documentary Marker", "Specialty", "Semi-transparent Multiply overlay for textbook analysis", Color(0xFFFACC15)),
-            BrushCatalogItem(ToolType.LASER_POINTER, "Luminous Laser Pointer", "Specialty", "Vibrant Screen glow ribbon for lecturing & presentation", Color(0xFFEF6461))
+            BrushCatalogItem(ToolType.PEN, "Studio Technical Pen", "Basics", "Uniform vector precision with sub-pixel Catmull-Rom smoothing", Color(0xFF898BFF), 3f, 1.0f, 0.85f),
+            BrushCatalogItem(ToolType.INK, "Fountain Calligraphy", "Basics", "Expressive velocity-sensitive dynamic line width", Color(0xFF6366F1), 6f, 1.0f, 0.6f),
+            BrushCatalogItem(ToolType.PENCIL, "Soft 2B Graphite", "Basics", "Authentic grainy graphite texture with tilt shading", Color(0xFF94A3B8), 8f, 0.85f, 0.2f),
+            BrushCatalogItem(ToolType.CHARCOAL, "Fixed Width Wire", "Basics", "Continuous uniform vector stroke for wireframe schematics", Color(0xFF64748B), 4f, 1.0f, 0.5f),
+            BrushCatalogItem(ToolType.WATERCOLOR, "Layered Watercolor Wash", "Artistic", "Semi-transparent fluid pigment with edge pooling", Color(0xFF2DD4BF), 24f, 0.45f, 0.5f),
+            BrushCatalogItem(ToolType.BRUSH, "Oils & Acrylic Impasto", "Artistic", "Rich blended brush with textural bristle tracks", Color(0xFF4ECCA3), 16f, 0.95f, 0.4f),
+            BrushCatalogItem(ToolType.AIRBRUSH, "Soft Airbrush Mist", "Artistic", "Feathered gradient mist for glow and ambient lighting", Color(0xFFFFBF69), 36f, 0.25f, 0.3f),
+            BrushCatalogItem(ToolType.FILL, "ColorDrop Flood Fill", "Tools", "Scanline flood fill with edge tolerance", Color(0xFFEF6461), 1f, 1.0f, 0f),
+            BrushCatalogItem(ToolType.LASSO, "Lasso Selection", "Tools", "Freehand lasso bounding box to move and scale elements", Color(0xFF38BDF8), 2f, 1.0f, 0f),
+            BrushCatalogItem(ToolType.TRANSFORM, "Nudge & Warp", "Tools", "Push and stretch vector strokes like wire", Color(0xFFF59E0B), 20f, 1.0f, 0.5f),
+            BrushCatalogItem(ToolType.SOFT_ERASER, "Slice Knife", "Tools", "Slice through vector lines to trim segments", Color(0xFFEC4899), 12f, 0.6f, 0.5f),
+            BrushCatalogItem(ToolType.ERASER, "Hard Mask", "Tools", "Clean vector erase and stroke carving", Color(0xFF94A3B8), 16f, 1.0f, 0.5f),
+            BrushCatalogItem(ToolType.PEN, "Crosshatching Fine Pen", "Brush Market", "Multi-stroke hatching for architectural depth", Color(0xFF818CF8), 2f, 0.9f, 0.4f),
+            BrushCatalogItem(ToolType.CHARCOAL, "Ink & Sponge Blot", "Brush Market", "Textured organic ink blots and spatter", Color(0xFF34D399), 18f, 0.8f, 0.3f),
+            BrushCatalogItem(ToolType.PIXEL, "Halftone Comic Dots", "Brush Market", "Classic pop-art offset printing screen dots", Color(0xFFF472B6), 10f, 1.0f, 0f),
+            BrushCatalogItem(ToolType.PENCIL, "Wood Parquet Tiling", "Brush Market", "Procedural wood texture fill", Color(0xFFD97706), 12f, 0.8f, 0.3f),
+            BrushCatalogItem(ToolType.PEN, "Architectural Slat Wall", "Brush Market", "Precision parallel facade slat texture", Color(0xFFA78BFA), 3f, 1.0f, 0.9f),
+            BrushCatalogItem(ToolType.HIGHLIGHTER, "Smart Documentary Marker", "Specialty", "Semi-transparent Multiply overlay for textbook analysis", Color(0xFFFACC15), 22f, 0.65f, 0.5f),
+            BrushCatalogItem(ToolType.LASER_POINTER, "Luminous Laser Pointer", "Specialty", "Vibrant Screen glow ribbon for lecturing & presentation", Color(0xFFEF6461), 10f, 1.0f, 0.7f)
         )
     }
 
@@ -225,7 +228,7 @@ fun A2BrushesDrawer(
                                 color = if (isSelected) A2Theme.Accent else Color.Transparent,
                                 shape = RoundedCornerShape(12.dp)
                             )
-                            .clickable { onSelectTool(item.tool) }
+                            .clickable { onSelectTool(item.tool, item.defaultSize, item.defaultOpacity, item.defaultSmoothing) }
                             .padding(10.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically

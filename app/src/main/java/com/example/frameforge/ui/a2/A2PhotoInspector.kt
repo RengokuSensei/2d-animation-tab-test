@@ -56,6 +56,7 @@ fun A2PhotoInspector(
     keyTolerance: Float,
     onKeyToleranceChange: (Float) -> Unit,
     onUploadPhoto: () -> Unit,
+    onClearPhoto: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -106,22 +107,37 @@ fun A2PhotoInspector(
             }
 
             // Upload Local Photo Button
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(A2Theme.Teal.copy(alpha = 0.18f))
-                    .border(1.dp, A2Theme.Teal.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
-                    .clickable { onUploadPhoto() }
-                    .padding(vertical = 6.dp),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "+ Upload Photo Reference",
-                    color = A2Theme.Teal,
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(A2Theme.Teal.copy(alpha = 0.18f))
+                        .border(1.dp, A2Theme.Teal.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                        .clickable { onUploadPhoto() }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "+ Photo Ref",
+                        color = A2Theme.Teal,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(A2Theme.Ink850)
+                        .clickable { onClearPhoto() }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "Clear", color = A2Theme.TextSecondary, fontSize = 10.sp)
+                }
             }
 
             // Tracing Opacity Slider

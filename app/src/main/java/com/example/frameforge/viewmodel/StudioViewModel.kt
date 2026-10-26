@@ -1043,7 +1043,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     cels = p.cels,
                     backgroundColor = android.graphics.Color.WHITE,
                     pdfTrack = p.pdfTrack,
-                    totalFrames = p.totalFrames
+                    totalFrames = p.totalFrames,
+                    videoTrack = p.videoTrack,
+                    colorGradingState = _colorGradingState.value,
+                    context = getApplication()
                 )
             }
 
@@ -1068,6 +1071,50 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     showStatus("MP4 Export failed")
                 }
                 onComplete(file)
+            }
+        }
+    }
+
+    fun exportImage(format: com.example.frameforge.ui.a2.ExportFormat, onComplete: (File?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val p = _project.value
+                val bmp = DrawingEngine.compositeFrame(
+                    width = p.canvasWidth,
+                    height = p.canvasHeight,
+                    frameIndex = _currentFrame.value,
+                    layers = p.layers,
+                    cels = p.cels,
+                    backgroundColor = android.graphics.Color.WHITE,
+                    pdfTrack = p.pdfTrack,
+                    totalFrames = p.totalFrames,
+                    videoTrack = p.videoTrack,
+                    colorGradingState = _colorGradingState.value,
+                    context = getApplication()
+                )
+                val isJpg = (format == com.example.frameforge.ui.a2.ExportFormat.JPG)
+                val file = if (isJpg) {
+                    storage.exportSingleFrameJpg(bmp)
+                } else {
+                    storage.exportSingleFramePng(bmp)
+                }
+                if (file != null) {
+                    storage.publishImageToGallery(file, if (isJpg) "image/jpeg" else "image/png")
+                }
+                withContext(Dispatchers.Main) {
+                    if (file != null) {
+                        showStatus("Exported ${format.label}: ${file.name}")
+                    } else {
+                        showStatus("Image export failed")
+                    }
+                    onComplete(file)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    showStatus("Export failed: ${e.message}")
+                    onComplete(null)
+                }
             }
         }
     }
@@ -1497,29 +1544,55 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun importRealVideo(uri: Uri, fileName: String) {
-        pushHistory()
-        val newClip = A2VideoClip(
-            title = fileName,
-            startPct = 0f,
-            endPct = 100f,
-            speed = 1.0f,
-            colorHex = 0xFF10B981,
-            isCustomVideo = true,
-            videoUri = uri.toString()
-        )
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val cacheFile = File(context.cacheDir, "vid_${System.currentTimeMillis()}.mp4")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(cacheFile).use { out -> input.copyTo(out) }
+                }
+                val localPath = cacheFile.absolutePath
 
-        _project.update { p ->
-            val updated = p.videoTrack.copy(
-                isEnabled = true,
-                clips = p.videoTrack.clips + newClip,
-                selectedClipId = newClip.id,
-                pipTransform = p.videoTrack.pipTransform.copy(isVisible = true)
-            )
-            p.copy(videoTrack = updated)
+                var durationMs = 0L
+                try {
+                    val mmr = MediaMetadataRetriever()
+                    mmr.setDataSource(localPath)
+                    durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    mmr.release()
+                } catch (_: Exception) {}
+
+                withContext(Dispatchers.Main) {
+                    pushHistory()
+                    val newClip = A2VideoClip(
+                        title = fileName,
+                        startPct = 0f,
+                        endPct = 100f,
+                        speed = 1.0f,
+                        colorHex = 0xFF10B981,
+                        isCustomVideo = true,
+                        videoUri = localPath
+                    )
+
+                    _project.update { p ->
+                        val updated = p.videoTrack.copy(
+                            isEnabled = true,
+                            clips = p.videoTrack.clips + newClip,
+                            selectedClipId = newClip.id,
+                            pipTransform = p.videoTrack.pipTransform.copy(isVisible = true)
+                        )
+                        p.copy(videoTrack = updated)
+                    }
+
+                    AppLogger.video("IMPORT_REAL_VIDEO", "Imported video '$fileName' ($durationMs ms) -> $localPath")
+                    showStatus("Imported Video: $fileName")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("IMPORT_VIDEO_ERROR", "Failed to import video", e)
+                withContext(Dispatchers.Main) {
+                    showStatus("Failed to import video: ${e.message}")
+                }
+            }
         }
-
-        AppLogger.video("IMPORT_REAL_VIDEO", "Imported video '$fileName' (URI: $uri)")
-        showStatus("Imported Video: $fileName")
     }
 
     fun selectVideoClip(clipId: String) {

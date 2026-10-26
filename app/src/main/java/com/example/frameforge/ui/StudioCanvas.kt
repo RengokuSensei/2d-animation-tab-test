@@ -111,6 +111,10 @@ fun StudioCanvas(
     rotoscopingState: com.example.frameforge.cinema.RotoscopingState = com.example.frameforge.cinema.RotoscopingState(),
     motionTrackingState: com.example.frameforge.cinema.MotionTrackingState = com.example.frameforge.cinema.MotionTrackingState(),
     colorGradingState: com.example.frameforge.cinema.ColorGradingState = com.example.frameforge.cinema.ColorGradingState(),
+    stagedPhotoBitmap: android.graphics.Bitmap? = null,
+    photoOpacity: Float = 1.0f,
+    photoFlipH: Boolean = false,
+    photoFlipV: Boolean = false,
     isReferenceCompanionOpen: Boolean = false,
     onStartStroke: (Float, Float, Float) -> Unit,
     onUpdateStroke: (Float, Float, Float) -> Unit,
@@ -413,6 +417,49 @@ fun StudioCanvas(
                     )
                 }
 
+                // Apply live hardware color grading filter across canvas
+                val isColorGradingActive = colorGradingState.isEnabled
+                if (isColorGradingActive) {
+                    val gradePaint = android.graphics.Paint().apply {
+                        colorFilter = android.graphics.ColorMatrixColorFilter(
+                            com.example.frameforge.cinema.ColorGradingEngine.buildColorMatrix(colorGradingState)
+                        )
+                    }
+                    nativeCanvas.saveLayer(null, gradePaint)
+                }
+
+                // 0. Draw Staged Photo Reference (if active)
+                if (stagedPhotoBitmap != null && !stagedPhotoBitmap.isRecycled) {
+                    nativeCanvas.save()
+                    val photoPaint = android.graphics.Paint().apply {
+                        alpha = (photoOpacity * 255).toInt().coerceIn(10, 255)
+                        isFilterBitmap = true
+                    }
+                    val docW = project.canvasWidth.toFloat()
+                    val docH = project.canvasHeight.toFloat()
+                    val scaleFactor = kotlin.math.min(docW / stagedPhotoBitmap.width, docH / stagedPhotoBitmap.height)
+                    val pw = stagedPhotoBitmap.width * scaleFactor
+                    val ph = stagedPhotoBitmap.height * scaleFactor
+                    val left = (docW - pw) / 2f
+                    val top = (docH - ph) / 2f
+
+                    if (photoFlipH || photoFlipV) {
+                        nativeCanvas.scale(
+                            if (photoFlipH) -1f else 1f,
+                            if (photoFlipV) -1f else 1f,
+                            docW / 2f,
+                            docH / 2f
+                        )
+                    }
+                    nativeCanvas.drawBitmap(
+                        stagedPhotoBitmap,
+                        null,
+                        android.graphics.RectF(left, top, left + pw, top + ph),
+                        photoPaint
+                    )
+                    nativeCanvas.restore()
+                }
+
                 // 1. Draw 4K Video Rotoscoping & Stage Underlay
                 if (project.videoTrack.isEnabled && (project.videoTrack.isUnderlay || project.videoTrack.pipTransform.isUnderlayMode)) {
                     RotoscopingEngine.renderVideoStagePiP(
@@ -614,6 +661,10 @@ fun StudioCanvas(
                         track = project.videoTrack,
                         context = context
                     )
+                }
+
+                if (isColorGradingActive) {
+                    nativeCanvas.restore()
                 }
 
                 nativeCanvas.restore()

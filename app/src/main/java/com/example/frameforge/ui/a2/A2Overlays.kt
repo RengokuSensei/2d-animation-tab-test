@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,14 +24,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -56,14 +60,31 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.frameforge.cinema.ColorGradingEngine
+import com.example.frameforge.cinema.ColorGradingPreset
+import com.example.frameforge.cinema.ColorGradingState
+import com.example.frameforge.cinema.ColorWheelValues
+import com.example.frameforge.cinema.CubicBezierCurve
+import com.example.frameforge.model.AnimationLayer
+import com.example.frameforge.model.AnimationNodeGraph
+import com.example.frameforge.model.AnimationNodeType
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 // =========================================================================
-// OVERLAY A: INTERACTIVE NODE COMPOSITOR
+// OVERLAY A: REAL INTERACTIVE NODE COMPOSITOR GRAPH
 // =========================================================================
 @Composable
 fun A2NodeCompositorOverlay(
+    graph: AnimationNodeGraph,
+    onAddNode: (AnimationNodeType) -> Unit,
+    onUpdateNodePosition: (String, Float, Float) -> Unit,
+    onRemoveNode: (String) -> Unit,
+    onAutoArrange: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -75,7 +96,7 @@ fun A2NodeCompositorOverlay(
         elevation = 20.dp
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header
+            // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -88,6 +109,7 @@ fun A2NodeCompositorOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Icon(imageVector = Icons.Default.Hub, contentDescription = null, tint = A2Theme.Purple, modifier = Modifier.size(18.dp))
                     Text(
                         text = "Interactive Node Compositor",
                         color = Color.White,
@@ -95,103 +117,172 @@ fun A2NodeCompositorOverlay(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "• Live DAG Wire Routing",
+                        text = "• ${graph.nodes.size} Nodes · Live DAG Wire Routing",
                         color = A2Theme.Purple,
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(A2Theme.Accent)
-                        .clickable { onDone() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "Done · Draw",
-                        color = A2Theme.Ink950,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // Auto Arrange Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .clickable { onAutoArrange() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = A2Theme.Amber, modifier = Modifier.size(12.dp))
+                            Text(text = "Auto Arrange", color = A2Theme.Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Done Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(A2Theme.Accent)
+                            .clickable { onDone() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Done · Draw",
+                            color = A2Theme.Ink950,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 
-            // Canvas Area with Simulated Nodes
+            // Quick Add Node Toolbar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(A2Theme.Ink850)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "+ Add:", color = A2Theme.TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                listOf(
+                    AnimationNodeType.LAYER to "Layer",
+                    AnimationNodeType.BLEND to "Blend",
+                    AnimationNodeType.COLOR_GRADE to "Color Grade",
+                    AnimationNodeType.TRANSFORM to "Transform",
+                    AnimationNodeType.BLUR to "Blur",
+                    AnimationNodeType.OUTPUT to "Output"
+                ).forEach { (type, label) ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(A2Theme.Ink900)
+                            .border(1.dp, A2Theme.GlassBorder, RoundedCornerShape(6.dp))
+                            .clickable { onAddNode(type) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(text = "+ $label", color = A2Theme.TextPrimary, fontSize = 9.5.sp)
+                    }
+                }
+            }
+
+            // Interactive Node Canvas Area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .background(A2Theme.Ink950)
             ) {
-                // Connection Wires
+                // Connection Wires between nodes
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val p1 = Offset(240f, 260f)
-                    val p2 = Offset(520f, 260f)
-                    val p3 = Offset(800f, 260f)
+                    val nodeMap = graph.nodes.associateBy { it.id }
+                    for (conn in graph.connections) {
+                        val fromNode = nodeMap[conn.fromNodeId] ?: continue
+                        val toNode = nodeMap[conn.toNodeId] ?: continue
 
-                    val path1 = Path().apply {
-                        moveTo(p1.x, p1.y)
-                        cubicTo(p1.x + 100f, p1.y, p2.x - 100f, p2.y, p2.x, p2.y)
-                    }
-                    val path2 = Path().apply {
-                        moveTo(p2.x, p2.y)
-                        cubicTo(p2.x + 100f, p2.y, p3.x - 100f, p3.y, p3.x, p3.y)
-                    }
+                        val p1 = Offset(fromNode.x + 160f, fromNode.y + 40f)
+                        val p2 = Offset(toNode.x, toNode.y + 40f)
 
-                    drawPath(path1, A2Theme.Purple, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
-                    drawPath(path2, A2Theme.Accent, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
-                }
-
-                // Node 1: Input Canvas
-                Box(
-                    modifier = Modifier
-                        .offset(x = 60.dp, y = 70.dp)
-                        .width(160.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(A2Theme.Ink900)
-                        .border(1.5.dp, A2Theme.Purple, RoundedCornerShape(14.dp))
-                        .padding(10.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(text = "Input Canvas", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "Active Cels: 3 Layers", color = A2Theme.TextSecondary, fontSize = 9.sp)
-                        Text(text = "RGBA8 · 1920x1080", color = A2Theme.Purple, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                        val dx = (p2.x - p1.x).coerceAtLeast(60f) * 0.5f
+                        val wirePath = Path().apply {
+                            moveTo(p1.x, p1.y)
+                            cubicTo(p1.x + dx, p1.y, p2.x - dx, p2.y, p2.x, p2.y)
+                        }
+                        drawPath(wirePath, A2Theme.Purple, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
                     }
                 }
 
-                // Node 2: 16mm Film Grain FX
-                Box(
-                    modifier = Modifier
-                        .offset(x = 260.dp, y = 70.dp)
-                        .width(160.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(A2Theme.Ink900)
-                        .border(1.5.dp, A2Theme.Accent, RoundedCornerShape(14.dp))
-                        .padding(10.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(text = "Film Grain 16mm", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "Intensity: 35%", color = A2Theme.TextSecondary, fontSize = 9.sp)
-                        Text(text = "Kodak 5219 Emulation", color = A2Theme.Accent, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                // Draggable Node Cards
+                graph.nodes.forEach { node ->
+                    val nodeColor = when (node.type) {
+                        AnimationNodeType.LAYER -> A2Theme.Mint
+                        AnimationNodeType.BLEND -> A2Theme.Accent
+                        AnimationNodeType.COLOR_GRADE -> A2Theme.Teal
+                        AnimationNodeType.TRANSFORM -> A2Theme.Amber
+                        AnimationNodeType.BLUR -> A2Theme.Rose
+                        AnimationNodeType.OUTPUT -> A2Theme.Purple
                     }
-                }
 
-                // Node 3: Output Composite
-                Box(
-                    modifier = Modifier
-                        .offset(x = 460.dp, y = 70.dp)
-                        .width(160.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(A2Theme.Ink900)
-                        .border(1.5.dp, A2Theme.Mint, RoundedCornerShape(14.dp))
-                        .padding(10.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(text = "Output Composite", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "Direct Stage Output", color = A2Theme.TextSecondary, fontSize = 9.sp)
-                        Text(text = "Master Stream V1", color = A2Theme.Mint, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset(node.x.toInt(), node.y.toInt()) }
+                            .width(170.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(A2Theme.Ink900)
+                            .border(1.5.dp, nodeColor, RoundedCornerShape(12.dp))
+                            .pointerInput(node.id) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    val newX = (node.x + dragAmount.x).coerceAtLeast(10f)
+                                    val newY = (node.y + dragAmount.y).coerceAtLeast(10f)
+                                    onUpdateNodePosition(node.id, newX, newY)
+                                }
+                            }
+                            .padding(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = node.title,
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                IconButton(
+                                    onClick = { onRemoveNode(node.id) },
+                                    modifier = Modifier.size(18.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Delete Node",
+                                        tint = A2Theme.TextSecondary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Type: ${node.type.name}",
+                                color = nodeColor,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Drag to reposition in graph",
+                                color = A2Theme.TextMuted,
+                                fontSize = 8.sp
+                            )
+                        }
                     }
                 }
             }
@@ -200,17 +291,19 @@ fun A2NodeCompositorOverlay(
 }
 
 // =========================================================================
-// OVERLAY B: UNIVERSAL VELOCITY CURVE & EASING GRAPH
+// OVERLAY B: REAL INTERACTIVE UNIVERSAL VELOCITY CURVE & EASING GRAPH
 // =========================================================================
 @Composable
 fun A2VelocityCurveOverlay(
+    curve: CubicBezierCurve,
+    onUpdateCurve: (CubicBezierCurve) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var p1x by remember { mutableFloatStateOf(0.25f) }
-    var p1y by remember { mutableFloatStateOf(0.10f) }
-    var p2x by remember { mutableFloatStateOf(0.25f) }
-    var p2y by remember { mutableFloatStateOf(1.00f) }
+    var p1x by remember(curve) { mutableFloatStateOf(curve.p1x) }
+    var p1y by remember(curve) { mutableFloatStateOf(curve.p1y) }
+    var p2x by remember(curve) { mutableFloatStateOf(curve.p2x) }
+    var p2y by remember(curve) { mutableFloatStateOf(curve.p2y) }
 
     val infiniteTransition = rememberInfiniteTransition()
     val animatedT by infiniteTransition.animateFloat(
@@ -221,6 +314,18 @@ fun A2VelocityCurveOverlay(
             repeatMode = RepeatMode.Restart
         )
     )
+
+    // Compute cubic bezier value at time t
+    fun evalBezier(t: Float, c1x: Float, c1y: Float, c2x: Float, c2y: Float): Float {
+        val u = 1f - t
+        val tt = t * t
+        val uu = u * u
+        val uuu = uu * u
+        val ttt = tt * t
+        return uuu * 0f + 3f * uu * t * c1y + 3f * u * tt * c2y + ttt * 1f
+    }
+
+    val easedProgress = evalBezier(animatedT, p1x, p1y, p2x, p2y).coerceIn(0f, 1.3f)
 
     GlassPill(
         modifier = modifier
@@ -250,7 +355,7 @@ fun A2VelocityCurveOverlay(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Peak: 1,480 px/s",
+                        text = "• Interactive Touch Handles",
                         color = A2Theme.Amber,
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace
@@ -262,21 +367,27 @@ fun A2VelocityCurveOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("Ease In-Out", "Elastic", "Linear").forEach { preset ->
+                    listOf(
+                        "Ease In-Out" to CubicBezierCurve(0.42f, 0.0f, 0.58f, 1.0f, "Ease In-Out"),
+                        "Elastic" to CubicBezierCurve(0.17f, 0.89f, 0.32f, 1.28f, "Elastic"),
+                        "Ease In" to CubicBezierCurve(0.42f, 0.0f, 1.0f, 1.0f, "Ease In"),
+                        "Ease Out" to CubicBezierCurve(0.0f, 0.0f, 0.58f, 1.0f, "Ease Out"),
+                        "Linear" to CubicBezierCurve(0.0f, 0.0f, 1.0f, 1.0f, "Linear")
+                    ).forEach { (label, preset) ->
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color.White.copy(alpha = 0.08f))
                                 .clickable {
-                                    when (preset) {
-                                        "Ease In-Out" -> { p1x = 0.42f; p1y = 0.0f; p2x = 0.58f; p2y = 1.0f }
-                                        "Elastic" -> { p1x = 0.17f; p1y = 0.89f; p2x = 0.32f; p2y = 1.28f }
-                                        "Linear" -> { p1x = 0.0f; p1y = 0.0f; p2x = 1.0f; p2y = 1.0f }
-                                    }
+                                    p1x = preset.p1x
+                                    p1y = preset.p1y
+                                    p2x = preset.p2x
+                                    p2y = preset.p2y
+                                    onUpdateCurve(preset)
                                 }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(text = preset, color = A2Theme.TextSecondary, fontSize = 10.sp)
+                            Text(text = label, color = A2Theme.TextSecondary, fontSize = 10.sp)
                         }
                     }
 
@@ -300,13 +411,37 @@ fun A2VelocityCurveOverlay(
                     .padding(14.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Interactive Bezier Graph Canvas
+                // Interactive Bezier Graph Canvas with Real Drag Gestures
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(16.dp))
                         .background(A2Theme.Ink950)
                         .border(1.dp, A2Theme.GlassBorder, RoundedCornerShape(16.dp))
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, _ ->
+                                change.consume()
+                                val w = size.width.toFloat()
+                                val h = size.height.toFloat()
+                                val pad = 40f
+                                val touch = change.position
+
+                                val c1Pos = Offset(pad + (w - 2 * pad) * p1x, (h - pad) - (h - 2 * pad) * p1y)
+                                val c2Pos = Offset(pad + (w - 2 * pad) * p2x, (h - pad) - (h - 2 * pad) * p2y)
+
+                                val d1 = (touch - c1Pos).getDistance()
+                                val d2 = (touch - c2Pos).getDistance()
+
+                                if (d1 < d2) {
+                                    p1x = ((touch.x - pad) / (w - 2 * pad)).coerceIn(0f, 1f)
+                                    p1y = (((h - pad) - touch.y) / (h - 2 * pad)).coerceIn(-0.3f, 1.5f)
+                                } else {
+                                    p2x = ((touch.x - pad) / (w - 2 * pad)).coerceIn(0f, 1f)
+                                    p2y = (((h - pad) - touch.y) / (h - 2 * pad)).coerceIn(-0.3f, 1.5f)
+                                }
+                                onUpdateCurve(CubicBezierCurve(p1x, p1y, p2x, p2y, "Custom Bezier"))
+                            }
+                        }
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val w = size.width
@@ -319,28 +454,48 @@ fun A2VelocityCurveOverlay(
                         val c2 = Offset(pad + (w - 2 * pad) * p2x, (h - pad) - (h - 2 * pad) * p2y)
 
                         // Grid Lines
-                        drawLine(A2Theme.GlassBorder, Offset(pad, h - pad), Offset(w - pad, h - pad), 1.dp.toPx())
-                        drawLine(A2Theme.GlassBorder, Offset(pad, pad), Offset(pad, h - pad), 1.dp.toPx())
+                        for (i in 1..4) {
+                            val gx = pad + (w - 2 * pad) * (i / 5f)
+                            val gy = pad + (h - 2 * pad) * (i / 5f)
+                            drawLine(Color.White.copy(alpha = 0.08f), Offset(gx, pad), Offset(gx, h - pad), 1f)
+                            drawLine(Color.White.copy(alpha = 0.08f), Offset(pad, gy), Offset(w - pad, gy), 1f)
+                        }
+
+                        // Axes
+                        drawLine(A2Theme.GlassBorder, start, Offset(w - pad, h - pad), 1.5.dp.toPx())
+                        drawLine(A2Theme.GlassBorder, start, Offset(pad, pad), 1.5.dp.toPx())
 
                         // Tangent Handles
-                        drawLine(A2Theme.Amber.copy(alpha = 0.6f), start, c1, 1.5.dp.toPx())
-                        drawLine(A2Theme.Amber.copy(alpha = 0.6f), end, c2, 1.5.dp.toPx())
-                        drawCircle(A2Theme.Amber, 6.dp.toPx(), c1)
-                        drawCircle(A2Theme.Amber, 6.dp.toPx(), c2)
+                        drawLine(A2Theme.Amber, start, c1, 2.dp.toPx())
+                        drawLine(A2Theme.Teal, end, c2, 2.dp.toPx())
+                        drawCircle(A2Theme.Amber, 9.dp.toPx(), c1)
+                        drawCircle(Color.White, 4.dp.toPx(), c1)
+                        drawCircle(A2Theme.Teal, 9.dp.toPx(), c2)
+                        drawCircle(Color.White, 4.dp.toPx(), c2)
 
                         // Cubic Bezier Motion Curve
                         val curvePath = Path().apply {
                             moveTo(start.x, start.y)
                             cubicTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y)
                         }
-                        drawPath(curvePath, A2Theme.Accent, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+                        drawPath(curvePath, A2Theme.Accent, style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round))
                     }
+
+                    Text(
+                        text = "Touch & drag orange or cyan control handles",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(10.dp)
+                    )
                 }
 
                 // Target Preview Orb
                 Column(
                     modifier = Modifier
-                        .width(220.dp)
+                        .width(240.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(A2Theme.Ink900)
                         .border(1.dp, A2Theme.GlassBorder, RoundedCornerShape(16.dp))
@@ -349,7 +504,7 @@ fun A2VelocityCurveOverlay(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(text = "Kinetic Motion Path", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "Applies Bezier timing curve across frames F1 to F8", color = A2Theme.TextSecondary, fontSize = 9.sp)
+                        Text(text = "Applies real-time cubic bezier timing function", color = A2Theme.TextSecondary, fontSize = 9.sp)
                     }
 
                     // Orb Track
@@ -363,7 +518,7 @@ fun A2VelocityCurveOverlay(
                     ) {
                         Box(
                             modifier = Modifier
-                                .offset(x = (animatedT * 150).dp)
+                                .offset(x = (easedProgress * 170).dp)
                                 .size(28.dp)
                                 .shadow(8.dp, CircleShape)
                                 .clip(CircleShape)
@@ -371,12 +526,21 @@ fun A2VelocityCurveOverlay(
                         )
                     }
 
-                    Text(
-                        text = "Curve: (${String.format("%.2f", p1x)}, ${String.format("%.2f", p1y)}, ${String.format("%.2f", p2x)}, ${String.format("%.2f", p2y)})",
-                        color = A2Theme.Amber,
-                        fontSize = 9.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Curve: (${String.format("%.2f", p1x)}, ${String.format("%.2f", p1y)}, ${String.format("%.2f", p2x)}, ${String.format("%.2f", p2y)})",
+                            color = A2Theme.Amber,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "f(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃",
+                            color = A2Theme.TextMuted,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
@@ -384,19 +548,12 @@ fun A2VelocityCurveOverlay(
 }
 
 // =========================================================================
-// OVERLAY C: LIVE STUDIO COLOR GRADE
+// OVERLAY C: REAL INTERACTIVE LIVE STUDIO COLOR GRADE
 // =========================================================================
 @Composable
 fun A2ColorGradeOverlay(
-    contrast: Float,
-    onContrastChange: (Float) -> Unit,
-    saturation: Float,
-    onSaturationChange: (Float) -> Unit,
-    warmth: Float,
-    onWarmthChange: (Float) -> Unit,
-    hueShift: Float,
-    onHueShiftChange: (Float) -> Unit,
-    onReset: () -> Unit,
+    state: ColorGradingState,
+    onStateChange: (ColorGradingState) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -424,11 +581,11 @@ fun A2ColorGradeOverlay(
                     Text(
                         text = "Live Studio Color Grade",
                         color = Color.White,
-                        fontSize = 12.5.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Lift · Gamma · Gain 3-Way Science",
+                        text = "Lift · Gamma · Gain 3-Way Science · Hardware LUT",
                         color = A2Theme.Teal,
                         fontSize = 9.5.sp,
                         fontFamily = FontFamily.Monospace
@@ -443,7 +600,9 @@ fun A2ColorGradeOverlay(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.White.copy(alpha = 0.08f))
-                            .clickable { onReset() }
+                            .clickable {
+                                onStateChange(ColorGradingEngine.applyPreset(ColorGradingPreset.NONE))
+                            }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(text = "Reset", color = A2Theme.TextSecondary, fontSize = 10.sp)
@@ -461,13 +620,49 @@ fun A2ColorGradeOverlay(
                 }
             }
 
+            // Cinematic LUT Presets Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    ColorGradingPreset.TEAL_AND_ORANGE to "Teal & Orange",
+                    ColorGradingPreset.KODAK_VISION3 to "Kodak 5219",
+                    ColorGradingPreset.FUJI_ETERNA to "Fuji Eterna",
+                    ColorGradingPreset.BLEACH_BYPASS to "Bleach Bypass",
+                    ColorGradingPreset.MONOCHROME_NOIR to "Noir B&W",
+                    ColorGradingPreset.ANIME_VIBRANT to "Anime Vibrant",
+                    ColorGradingPreset.UPSC_STUDY_WARM to "UPSC Study Warm"
+                ).forEach { (preset, label) ->
+                    val isSel = (state.preset == preset && state.isEnabled)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSel) A2Theme.Teal.copy(alpha = 0.25f) else A2Theme.Ink850)
+                            .border(1.dp, if (isSel) A2Theme.Teal else A2Theme.GlassBorder, RoundedCornerShape(8.dp))
+                            .clickable { onStateChange(ColorGradingEngine.applyPreset(preset)) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSel) A2Theme.Teal else A2Theme.TextSecondary,
+                            fontSize = 9.5.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
             // 3-Way Wheels & Sliders
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Wheels Row (Lift, Gamma, Gain)
+                // Interactive 3-Way Wheels Row (Lift, Gamma, Gain)
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(14.dp))
@@ -475,30 +670,50 @@ fun A2ColorGradeOverlay(
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    listOf("LIFT" to A2Theme.Accent, "GAMMA" to A2Theme.Teal, "GAIN" to A2Theme.Amber).forEach { (lbl, col) ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(text = lbl, color = A2Theme.TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp)
-                                    .clip(CircleShape)
-                                    .background(A2Theme.Ink900)
-                                    .border(1.dp, col.copy(alpha = 0.4f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .border(1.5.dp, col, CircleShape)
-                                )
-                            }
+                    // LIFT WHEEL
+                    ColorWheelPuck(
+                        title = "LIFT",
+                        color = A2Theme.Accent,
+                        curX = state.liftGammaGain.lift.red,
+                        curY = state.liftGammaGain.lift.blue,
+                        onDragPuck = { dx, dy ->
+                            val updatedLift = state.liftGammaGain.lift.copy(
+                                red = (state.liftGammaGain.lift.red + dx).coerceIn(-0.5f, 0.5f),
+                                blue = (state.liftGammaGain.lift.blue + dy).coerceIn(-0.5f, 0.5f)
+                            )
+                            onStateChange(state.copy(isEnabled = true, liftGammaGain = state.liftGammaGain.copy(lift = updatedLift)))
                         }
-                    }
+                    )
+
+                    // GAMMA WHEEL
+                    ColorWheelPuck(
+                        title = "GAMMA",
+                        color = A2Theme.Teal,
+                        curX = state.liftGammaGain.gamma.red,
+                        curY = state.liftGammaGain.gamma.blue,
+                        onDragPuck = { dx, dy ->
+                            val updatedGamma = state.liftGammaGain.gamma.copy(
+                                red = (state.liftGammaGain.gamma.red + dx).coerceIn(-0.5f, 0.5f),
+                                blue = (state.liftGammaGain.gamma.blue + dy).coerceIn(-0.5f, 0.5f)
+                            )
+                            onStateChange(state.copy(isEnabled = true, liftGammaGain = state.liftGammaGain.copy(gamma = updatedGamma)))
+                        }
+                    )
+
+                    // GAIN WHEEL
+                    ColorWheelPuck(
+                        title = "GAIN",
+                        color = A2Theme.Amber,
+                        curX = state.liftGammaGain.gain.red,
+                        curY = state.liftGammaGain.gain.blue,
+                        onDragPuck = { dx, dy ->
+                            val updatedGain = state.liftGammaGain.gain.copy(
+                                red = (state.liftGammaGain.gain.red + dx).coerceIn(-0.5f, 0.5f),
+                                blue = (state.liftGammaGain.gain.blue + dy).coerceIn(-0.5f, 0.5f)
+                            )
+                            onStateChange(state.copy(isEnabled = true, liftGammaGain = state.liftGammaGain.copy(gain = updatedGain)))
+                        }
+                    )
                 }
 
                 // Sliders Grid
@@ -509,25 +724,37 @@ fun A2ColorGradeOverlay(
                     // Contrast
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(text = "Contrast", color = A2Theme.TextSecondary, fontSize = 9.5.sp)
-                        Text(text = "${(contrast * 100).toInt()}%", color = Color.White, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
+                        Text(text = "${(state.contrast * 100).toInt()}%", color = Color.White, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
                     }
                     Slider(
-                        value = contrast,
-                        onValueChange = onContrastChange,
-                        valueRange = 0.7f..1.5f,
+                        value = state.contrast,
+                        onValueChange = { onStateChange(state.copy(isEnabled = true, contrast = it)) },
+                        valueRange = 0.5f..2.0f,
                         colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = A2Theme.Ink800)
                     )
 
                     // Saturation
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(text = "Saturation", color = A2Theme.TextSecondary, fontSize = 9.5.sp)
-                        Text(text = "${(saturation * 100).toInt()}%", color = Color.White, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
+                        Text(text = "${(state.cdl.saturation * 100).toInt()}%", color = Color.White, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
                     }
                     Slider(
-                        value = saturation,
-                        onValueChange = onSaturationChange,
-                        valueRange = 0f..2f,
-                        colors = SliderDefaults.colors(thumbColor = A2Theme.Accent, activeTrackColor = A2Theme.Accent, inactiveTrackColor = A2Theme.Ink800)
+                        value = state.cdl.saturation,
+                        onValueChange = { onStateChange(state.copy(isEnabled = true, cdl = state.cdl.copy(saturation = it))) },
+                        valueRange = 0f..2.5f,
+                        colors = SliderDefaults.colors(thumbColor = A2Theme.Teal, activeTrackColor = A2Theme.Teal, inactiveTrackColor = A2Theme.Ink800)
+                    )
+
+                    // Color Temperature (Kelvin)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(text = "Temperature (White Balance)", color = A2Theme.TextSecondary, fontSize = 9.5.sp)
+                        Text(text = "${state.whiteBalance.kelvin.toInt()}K", color = A2Theme.Amber, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    Slider(
+                        value = state.whiteBalance.kelvin,
+                        onValueChange = { onStateChange(state.copy(isEnabled = true, whiteBalance = state.whiteBalance.copy(kelvin = it))) },
+                        valueRange = 2500f..9000f,
+                        colors = SliderDefaults.colors(thumbColor = A2Theme.Amber, activeTrackColor = A2Theme.Amber, inactiveTrackColor = A2Theme.Ink800)
                     )
                 }
             }
@@ -535,15 +762,58 @@ fun A2ColorGradeOverlay(
     }
 }
 
+@Composable
+private fun ColorWheelPuck(
+    title: String,
+    color: Color,
+    curX: Float,
+    curY: Float,
+    onDragPuck: (Float, Float) -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(text = title, color = A2Theme.TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(A2Theme.Ink900)
+                .border(1.dp, color.copy(alpha = 0.4f), CircleShape)
+                .pointerInput(Unit) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        onDragPuck(dragAmount.x * 0.01f, dragAmount.y * 0.01f)
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            // Target Puck
+            Box(
+                modifier = Modifier
+                    .offset(x = (curX * 30).dp, y = (curY * 30).dp)
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .border(1.5.dp, color, CircleShape)
+            )
+        }
+    }
+}
+
 // =========================================================================
-// OVERLAY D: 3D MULTIPLANE STAGE
+// OVERLAY D: REAL INTERACTIVE 3D MULTIPLANE STAGE
 // =========================================================================
 @Composable
 fun A2Stage3DOverlay(
+    layers: List<AnimationLayer>,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var zSpread by remember { mutableFloatStateOf(110f) }
+    var orbitAngleY by remember { mutableFloatStateOf(0f) }
+    var orbitAngleX by remember { mutableFloatStateOf(10f) }
+    var zSpread by remember { mutableFloatStateOf(100f) }
 
     GlassPill(
         modifier = modifier
@@ -573,7 +843,7 @@ fun A2Stage3DOverlay(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "• Orbit around live 2D cels in 3D depth",
+                        text = "• Orbit camera around ${layers.size} live 2D cels in 3D depth",
                         color = A2Theme.Rose,
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace
@@ -584,6 +854,20 @@ fun A2Stage3DOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(text = "Z-Spread", color = A2Theme.TextSecondary, fontSize = 10.sp)
+                        Slider(
+                            value = zSpread,
+                            onValueChange = { zSpread = it },
+                            valueRange = 40f..220f,
+                            colors = SliderDefaults.colors(thumbColor = A2Theme.Rose, activeTrackColor = A2Theme.Rose),
+                            modifier = Modifier.width(100.dp)
+                        )
+                    }
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
@@ -596,41 +880,77 @@ fun A2Stage3DOverlay(
                 }
             }
 
-            // Simulated 3D Depth Planes Canvas
+            // Interactive 3D Orbit Canvas
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .background(A2Theme.Ink950)
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            orbitAngleY = (orbitAngleY + dragAmount.x * 0.25f).coerceIn(-65f, 65f)
+                            orbitAngleX = (orbitAngleX - dragAmount.y * 0.25f).coerceIn(-40f, 40f)
+                        }
+                    },
+                contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
+                    val radY = Math.toRadians(orbitAngleY.toDouble())
+                    val radX = Math.toRadians(orbitAngleX.toDouble())
 
-                    // 3 Stacked Perspective Layer Rectangles
-                    val layerOffsets = listOf(
-                        Offset(cx - 180f, cy - 90f) to A2Theme.Rose.copy(alpha = 0.25f),
-                        Offset(cx - 140f, cy - 50f) to A2Theme.Accent.copy(alpha = 0.35f),
-                        Offset(cx - 100f, cy - 10f) to A2Theme.Amber.copy(alpha = 0.45f)
-                    )
-                    val planeSize = Size(360f, 200f)
+                    val layerCount = layers.size.coerceAtLeast(1)
+                    layers.forEachIndexed { i, layer ->
+                        val z = (i - (layerCount - 1) / 2f) * zSpread
+                        val depthScale = (1.0f + (z / 600f)).coerceAtLeast(0.4f)
+                        val pw = 360f * depthScale
+                        val ph = 200f * depthScale
+                        val px = cx + (z * sin(radY)).toFloat()
+                        val py = cy - (z * sin(radX)).toFloat()
 
-                    for ((topL, col) in layerOffsets) {
-                        drawRect(col, topL, planeSize)
-                        drawRect(Color.White.copy(alpha = 0.6f), topL, planeSize, style = Stroke(width = 1.5.dp.toPx()))
+                        val layerColor = when (i % 4) {
+                            0 -> A2Theme.Rose
+                            1 -> A2Theme.Accent
+                            2 -> A2Theme.Amber
+                            else -> A2Theme.Mint
+                        }
+
+                        // Plane Box
+                        drawRect(
+                            color = layerColor.copy(alpha = 0.2f),
+                            topLeft = Offset(px - pw / 2f, py - ph / 2f),
+                            size = Size(pw, ph)
+                        )
+                        drawRect(
+                            color = layerColor,
+                            topLeft = Offset(px - pw / 2f, py - ph / 2f),
+                            size = Size(pw, ph),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
                     }
                 }
 
-                // Layer Labels
+                // Instructions & telemetry
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(text = "Layer 3 (Foreground Cels): Z = 0", color = A2Theme.Amber, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                    Text(text = "Layer 2 (Hero Ink Character): Z = -50", color = A2Theme.Accent, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                    Text(text = "Layer 1 (Deep Space & Stars): Z = -110", color = A2Theme.Rose, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    Text(
+                        text = "Drag horizontally/vertically to orbit virtual multiplane camera",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "Camera: Azimuth ${orbitAngleY.toInt()}° · Elevation ${orbitAngleX.toInt()}° · Z-Depth ${zSpread.toInt()}px",
+                        color = A2Theme.Rose,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
             }
         }

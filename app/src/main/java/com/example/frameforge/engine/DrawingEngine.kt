@@ -1,5 +1,6 @@
 package com.example.frameforge.engine
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -12,6 +13,8 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
+import com.example.frameforge.cinema.ColorGradingEngine
+import com.example.frameforge.cinema.ColorGradingState
 import com.example.frameforge.model.AdjustmentState
 import com.example.frameforge.model.AdjustmentType
 import com.example.frameforge.model.AnimationLayer
@@ -22,6 +25,7 @@ import com.example.frameforge.model.SelectionState
 import com.example.frameforge.model.StrokePoint
 import com.example.frameforge.model.ToolType
 import com.example.frameforge.model.TransformState
+import com.example.frameforge.model.VideoRotoscopingTrack
 import com.example.frameforge.ui.a2.CanvasPaperPreset
 import com.example.frameforge.ui.a2.GridType
 import com.example.frameforge.ui.a2.GuideType
@@ -338,7 +342,8 @@ object DrawingEngine {
     }
 
     /**
-     * Composites all active layers for a given frame index into a target Bitmap
+     * Composites all active layers for a given frame index into a target Bitmap,
+     * including video rotoscoping tracks and hardware color grading filters.
      */
     fun compositeFrame(
         width: Int,
@@ -349,7 +354,10 @@ object DrawingEngine {
         backgroundColor: Int? = null,
         targetBitmap: Bitmap? = null,
         pdfTrack: com.example.frameforge.pdf.PdfDocumentTrack? = null,
-        totalFrames: Int = 24
+        totalFrames: Int = 24,
+        videoTrack: VideoRotoscopingTrack? = null,
+        colorGradingState: ColorGradingState? = null,
+        context: Context? = null
     ): Bitmap {
         val bmp = targetBitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -360,11 +368,35 @@ object DrawingEngine {
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
         }
 
-        // Draw PDF Track Underlay if enabled
+        // Apply hardware color grading if enabled
+        val isColorGrading = colorGradingState != null && colorGradingState.isEnabled
+        if (isColorGrading) {
+            val gradePaint = Paint().apply {
+                colorFilter = ColorMatrixColorFilter(ColorGradingEngine.buildColorMatrix(colorGradingState!!))
+            }
+            canvas.saveLayer(null, gradePaint)
+        }
+
+        // 1. Draw Video Track Underlay if enabled
+        if (videoTrack != null && videoTrack.isEnabled && (videoTrack.isUnderlay || videoTrack.pipTransform.isUnderlayMode)) {
+            RotoscopingEngine.renderVideoStagePiP(
+                canvas = canvas,
+                docWidth = width,
+                docHeight = height,
+                frameIndex = frameIndex,
+                totalFrames = totalFrames,
+                fps = 24,
+                track = videoTrack,
+                context = context
+            )
+        }
+
+        // 2. Draw PDF Track Underlay if enabled
         if (pdfTrack != null && pdfTrack.isEnabled && pdfTrack.isUnderlay) {
             renderPdfTrackFrame(canvas, width, height, frameIndex, totalFrames, pdfTrack)
         }
 
+        // 3. Draw Drawing Cels by layer
         val celsByLayer = cels.filter { it.frameIndex == frameIndex }.associateBy { it.layerId }
 
         for (layer in layers) {
@@ -404,9 +436,27 @@ object DrawingEngine {
             }
         }
 
-        // Draw PDF Track Overlay if enabled
+        // 4. Draw PDF Track Overlay if enabled
         if (pdfTrack != null && pdfTrack.isEnabled && !pdfTrack.isUnderlay) {
             renderPdfTrackFrame(canvas, width, height, frameIndex, totalFrames, pdfTrack)
+        }
+
+        // 5. Draw Video Track PiP Overlay if enabled and not underlay
+        if (videoTrack != null && videoTrack.isEnabled && !videoTrack.pipTransform.isUnderlayMode && videoTrack.pipTransform.isVisible) {
+            RotoscopingEngine.renderVideoStagePiP(
+                canvas = canvas,
+                docWidth = width,
+                docHeight = height,
+                frameIndex = frameIndex,
+                totalFrames = totalFrames,
+                fps = 24,
+                track = videoTrack,
+                context = context
+            )
+        }
+
+        if (isColorGrading) {
+            canvas.restore()
         }
 
         return bmp

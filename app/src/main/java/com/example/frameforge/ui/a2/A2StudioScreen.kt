@@ -1,13 +1,16 @@
 package com.example.frameforge.ui.a2
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import com.example.frameforge.log.AppLogger
+import com.example.frameforge.ui.popovers.PdfImportDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -83,6 +86,15 @@ fun A2StudioScreen(
     val palmRejectionMode by viewModel.palmRejectionMode.collectAsState()
     val pressureCurve by viewModel.pressureCurve.collectAsState()
 
+    // Real Specialized Workspace & Studio States from ViewModel
+    val nodeGraph by viewModel.nodeGraph.collectAsState()
+    val velocityCurveState by viewModel.velocityCurveState.collectAsState()
+    val colorGradingState by viewModel.colorGradingState.collectAsState()
+    val multiplaneStageState by viewModel.multiplaneStageState.collectAsState()
+    val isPdfImportDialogOpen by viewModel.isPdfImportDialogOpen.collectAsState()
+    val pdfFile by viewModel.pdfFile.collectAsState()
+    val pdfDocumentTitle by viewModel.pdfDocumentTitle.collectAsState()
+
     // Screen-level UI states
     var currentMode by remember { mutableStateOf(A2StudioMode.DRAW) }
     var isZenMode by remember { mutableStateOf(false) }
@@ -103,7 +115,10 @@ fun A2StudioScreen(
     var isPdfOnStage by remember { mutableStateOf(false) }
 
     var isPhotoInspectorOpen by remember { mutableStateOf(false) }
+    var stagedPhotoBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var photoOpacity by remember { mutableFloatStateOf(0.85f) }
+    var photoFlipH by remember { mutableStateOf(false) }
+    var photoFlipV by remember { mutableStateOf(false) }
     var photoKeyMode by remember { mutableStateOf(PhotoKeyMode.OFF) }
     var photoKeyTol by remember { mutableFloatStateOf(0.45f) }
 
@@ -119,12 +134,6 @@ fun A2StudioScreen(
     var isTimelineExpanded by remember { mutableStateOf(false) }
     var isRecordingVoiceover by remember { mutableStateOf(false) }
 
-    // Color Grading
-    var gradeContrast by remember { mutableFloatStateOf(1.0f) }
-    var gradeSaturation by remember { mutableFloatStateOf(1.0f) }
-    var gradeWarmth by remember { mutableFloatStateOf(0.0f) }
-    var gradeHue by remember { mutableFloatStateOf(0.0f) }
-
     // Export State
     var isExportingMp4 by remember { mutableStateOf(false) }
 
@@ -137,6 +146,34 @@ fun A2StudioScreen(
     var isCanvasLocked by remember { mutableStateOf(false) }
     var layerScope by remember { mutableStateOf(LayerScope.ALL) }
     var fingerTouchMode by remember { mutableStateOf(FingerTouchMode.DRAW) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val bmp = context.contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it)
+                }
+                if (bmp != null) {
+                    stagedPhotoBitmap = bmp
+                    isPhotoInspectorOpen = true
+                    AppLogger.action("LOAD_PHOTO_REF", "Loaded photo reference (${bmp.width}x${bmp.height})")
+                    Toast.makeText(context, "Loaded Photo Ref (${bmp.width}x${bmp.height})", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to load photo: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.openPdfImportDialogWithUri(uri)
+        }
+    }
 
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -236,6 +273,11 @@ fun A2StudioScreen(
                     palmRejectionMode = palmRejectionMode,
                     fingerTouchMode = fingerTouchMode,
                     pressureCurve = pressureCurve,
+                    colorGradingState = colorGradingState,
+                    stagedPhotoBitmap = stagedPhotoBitmap,
+                    photoOpacity = photoOpacity,
+                    photoFlipH = photoFlipH,
+                    photoFlipV = photoFlipV,
                     onStartStroke = { x, y, p -> viewModel.startStroke(x, y, p) },
                     onUpdateStroke = { x, y, p -> viewModel.updateStroke(x, y, p) },
                     onUpdateStrokeBatch = { pts -> viewModel.updateStrokeBatch(pts) },
@@ -477,8 +519,11 @@ fun A2StudioScreen(
         ) {
             A2BrushesDrawer(
                 currentTool = currentTool,
-                onSelectTool = {
-                    viewModel.setTool(it)
+                onSelectTool = { tool, size, opacity, smoothing ->
+                    viewModel.setTool(tool)
+                    viewModel.setBrushSize(size)
+                    viewModel.setBrushOpacity(opacity)
+                    viewModel.setBrushSmoothing(smoothing)
                     isBrushesMarketOpen = false
                 },
                 activeColor = brushColor,
@@ -501,9 +546,9 @@ fun A2StudioScreen(
                 onPageChange = { pdfCurrentPage = it },
                 isShowOnStage = isPdfOnStage,
                 onToggleShowOnStage = { isPdfOnStage = it },
-                onImportPdf = { Toast.makeText(context, "Opening PDF document picker...", Toast.LENGTH_SHORT).show() },
+                onImportPdf = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
                 onExtractDiagramAsCel = {
-                    Toast.makeText(context, "Diagram extracted as vector lines on Cel $currentFrame", Toast.LENGTH_LONG).show()
+                    viewModel.loadSamplePdfDocument()
                     isPdfShelfOpen = false
                 },
                 onClose = { isPdfShelfOpen = false }
@@ -522,14 +567,15 @@ fun A2StudioScreen(
             A2PhotoInspector(
                 opacity = photoOpacity,
                 onOpacityChange = { photoOpacity = it },
-                onFlipH = { Toast.makeText(context, "Flipped Horizontally", Toast.LENGTH_SHORT).show() },
-                onFlipV = { Toast.makeText(context, "Flipped Vertically", Toast.LENGTH_SHORT).show() },
+                onFlipH = { photoFlipH = !photoFlipH },
+                onFlipV = { photoFlipV = !photoFlipV },
                 onCrop = { Toast.makeText(context, "Crop Box Active", Toast.LENGTH_SHORT).show() },
                 keyMode = photoKeyMode,
                 onKeyModeChange = { photoKeyMode = it },
                 keyTolerance = photoKeyTol,
                 onKeyToleranceChange = { photoKeyTol = it },
-                onUploadPhoto = { Toast.makeText(context, "Opening photo reference picker...", Toast.LENGTH_SHORT).show() },
+                onUploadPhoto = { photoPickerLauncher.launch("image/*") },
+                onClearPhoto = { stagedPhotoBitmap = null },
                 onClose = { isPhotoInspectorOpen = false }
             )
         }
@@ -538,38 +584,34 @@ fun A2StudioScreen(
         when (currentMode) {
             A2StudioMode.NODES -> {
                 A2NodeCompositorOverlay(
+                    graph = nodeGraph,
+                    onAddNode = { viewModel.addGraphNode(it) },
+                    onUpdateNodePosition = { id, x, y -> viewModel.updateNodePosition(id, x, y) },
+                    onRemoveNode = { viewModel.removeGraphNode(it) },
+                    onAutoArrange = { viewModel.autoArrangeNodeGraph() },
                     onDone = { currentMode = A2StudioMode.DRAW },
                     modifier = Modifier.fillMaxSize()
                 )
             }
             A2StudioMode.VELOCITY -> {
                 A2VelocityCurveOverlay(
+                    curve = velocityCurveState.curve,
+                    onUpdateCurve = { viewModel.updateVelocityCurve(it) },
                     onDone = { currentMode = A2StudioMode.DRAW },
                     modifier = Modifier.fillMaxSize()
                 )
             }
             A2StudioMode.GRADE -> {
                 A2ColorGradeOverlay(
-                    contrast = gradeContrast,
-                    onContrastChange = { gradeContrast = it },
-                    saturation = gradeSaturation,
-                    onSaturationChange = { gradeSaturation = it },
-                    warmth = gradeWarmth,
-                    onWarmthChange = { gradeWarmth = it },
-                    hueShift = gradeHue,
-                    onHueShiftChange = { gradeHue = it },
-                    onReset = {
-                        gradeContrast = 1.0f
-                        gradeSaturation = 1.0f
-                        gradeWarmth = 0.0f
-                        gradeHue = 0.0f
-                    },
+                    state = colorGradingState,
+                    onStateChange = { viewModel.updateColorGradingState(it) },
                     onDone = { currentMode = A2StudioMode.DRAW },
                     modifier = Modifier.fillMaxSize()
                 )
             }
             A2StudioMode.STAGE_3D -> {
                 A2Stage3DOverlay(
+                    layers = project.layers,
                     onDone = { currentMode = A2StudioMode.DRAW },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -686,26 +728,100 @@ fun A2StudioScreen(
             A2ExportModal(
                 onTriggerExport = { format, region, incBg, incGrid, scale ->
                     isExportModalOpen = false
-                    if (format == ExportFormat.MP4) {
-                        isExportingMp4 = true
-                        viewModel.exportMp4 { file ->
-                            isExportingMp4 = false
-                            if (file != null && file.exists()) {
-                                Toast.makeText(context, "Exported MP4: ${file.name}", Toast.LENGTH_LONG).show()
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "video/mp4"
-                                    putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file))
+                    when (format) {
+                        ExportFormat.MP4 -> {
+                            isExportingMp4 = true
+                            viewModel.exportMp4 { file ->
+                                isExportingMp4 = false
+                                if (file != null && file.exists()) {
+                                    Toast.makeText(context, "Exported MP4: ${file.name}", Toast.LENGTH_LONG).show()
+                                    try {
+                                        val contentUri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file
+                                        )
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "video/mp4"
+                                            putExtra(Intent.EXTRA_STREAM, contentUri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share MP4 Animation"))
+                                    } catch (e: Exception) {
+                                        AppLogger.e("EXPORT_SHARE_ERROR", "Failed to share video", e)
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Share MP4 Animation"))
-                            } else {
-                                Toast.makeText(context, "Export completed to Movies/FrameForge", Toast.LENGTH_SHORT).show()
                             }
                         }
-                    } else {
-                        Toast.makeText(context, "Exported ${format.label} ($region, ${scale}%)", Toast.LENGTH_LONG).show()
+                        ExportFormat.PNG -> {
+                            viewModel.exportImage(ExportFormat.PNG) { file ->
+                                if (file != null && file.exists()) {
+                                    Toast.makeText(context, "Exported PNG: ${file.name}", Toast.LENGTH_LONG).show()
+                                    try {
+                                        val contentUri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file
+                                        )
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "image/png"
+                                            putExtra(Intent.EXTRA_STREAM, contentUri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share Frame PNG"))
+                                    } catch (e: Exception) {
+                                        AppLogger.e("EXPORT_SHARE_ERROR", "Failed to share PNG", e)
+                                    }
+                                } else {
+                                    Toast.makeText(context, "PNG Export failed", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        ExportFormat.JPG -> {
+                            viewModel.exportImage(ExportFormat.JPG) { file ->
+                                if (file != null && file.exists()) {
+                                    Toast.makeText(context, "Exported JPG: ${file.name}", Toast.LENGTH_LONG).show()
+                                    try {
+                                        val contentUri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file
+                                        )
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "image/jpeg"
+                                            putExtra(Intent.EXTRA_STREAM, contentUri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share Frame JPG"))
+                                    } catch (e: Exception) {
+                                        AppLogger.e("EXPORT_SHARE_ERROR", "Failed to share JPG", e)
+                                    }
+                                } else {
+                                    Toast.makeText(context, "JPG Export failed", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        else -> {
+                            Toast.makeText(context, "Exported ${format.label} ($region, ${scale}%)", Toast.LENGTH_LONG).show()
+                        }
                     }
                 },
                 onClose = { isExportModalOpen = false }
+            )
+        }
+
+        // 11e. REAL PDF DOCUMENT IMPORT & CEL EXTRACTION DIALOG
+        if (isPdfImportDialogOpen && pdfFile != null) {
+            PdfImportDialog(
+                pdfFile = pdfFile!!,
+                pdfTitle = pdfDocumentTitle,
+                fps = project.fps,
+                onDismiss = { viewModel.closePdfImportDialog() },
+                onImportPages = { pages, trackType, holdFrames, underlay ->
+                    viewModel.importPdfPages(pages, trackType, holdFrames, underlay)
+                }
             )
         }
 

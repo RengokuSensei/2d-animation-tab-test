@@ -27,7 +27,13 @@ object VideoFrameCache {
             if (currentUriStr != videoUriStr || retriever == null) {
                 retriever?.release()
                 retriever = MediaMetadataRetriever().apply {
-                    setDataSource(context, Uri.parse(videoUriStr))
+                    if (videoUriStr.startsWith("/")) {
+                        setDataSource(videoUriStr)
+                    } else if (videoUriStr.startsWith("file://")) {
+                        setDataSource(videoUriStr.removePrefix("file://"))
+                    } else {
+                        setDataSource(context, Uri.parse(videoUriStr))
+                    }
                 }
                 currentUriStr = videoUriStr
             }
