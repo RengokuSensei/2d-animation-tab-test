@@ -22,9 +22,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -98,17 +100,12 @@ import com.example.frameforge.model.AnimationProject
 import com.example.frameforge.model.DrawingStroke
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.frameforge.cinema.ColorGradingEngine
 import com.example.frameforge.cinema.ColorGradingPreset
 import com.example.frameforge.cinema.ColorGradingState
 import com.example.frameforge.cinema.ColorWheelValues
 import com.example.frameforge.cinema.CubicBezierCurve
-import com.example.frameforge.model.AnimationLayer
 import com.example.frameforge.model.AnimationNodeGraph
 import com.example.frameforge.model.AnimationNodeType
 import kotlin.math.cos
@@ -1356,7 +1353,7 @@ fun A2Stage3DOverlay(
                                             textAlign = Paint.Align.CENTER
                                             isAntiAlias = true
                                         }
-                                        nativeCanvas.drawText("Page ${project.pdfTrack.currentPage} of ${project.pdfTrack.pageCount}", baseW / 2f, baseH / 2f + 16f, subPaint)
+                                        nativeCanvas.drawText("${project.pdfTrack.totalDocumentPages} page(s) loaded · Underlay", baseW / 2f, baseH / 2f + 16f, subPaint)
                                     }
                                 }
 
@@ -1643,6 +1640,7 @@ fun A2Stage3DOverlay(
                     }
                 }
             }
+        }
 
             // 3. BOTTOM ANIMATION TRANSPORT & FRAME SCRUBBER BAR
             Row(
