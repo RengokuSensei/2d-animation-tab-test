@@ -158,7 +158,7 @@ fun A2StudioScreen(
                 if (bmp != null) {
                     stagedPhotoBitmap = bmp
                     isPhotoInspectorOpen = true
-                    AppLogger.action("LOAD_PHOTO_REF", "Loaded photo reference (${bmp.width}x${bmp.height})")
+                    AppLogger.ui("LOAD_PHOTO_REF", "Loaded photo reference (${bmp.width}x${bmp.height})")
                     Toast.makeText(context, "Loaded Photo Ref (${bmp.width}x${bmp.height})", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -587,7 +587,7 @@ fun A2StudioScreen(
                     graph = nodeGraph,
                     onAddNode = { viewModel.addGraphNode(it) },
                     onUpdateNodePosition = { id, x, y -> viewModel.updateNodePosition(id, x, y) },
-                    onRemoveNode = { viewModel.removeGraphNode(it) },
+                    onRemoveNode = { viewModel.deleteGraphNode(it) },
                     onAutoArrange = { viewModel.autoArrangeNodeGraph() },
                     onDone = { currentMode = A2StudioMode.DRAW },
                     modifier = Modifier.fillMaxSize()
