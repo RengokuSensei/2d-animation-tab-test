@@ -334,17 +334,29 @@ fun A2StudioScreen(
                         isExportingMp4 = false
                         if (file != null && file.exists()) {
                             Toast.makeText(context, "Exported MP4: ${file.name}", Toast.LENGTH_LONG).show()
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "video/mp4"
-                                putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file))
+                            try {
+                                val contentUri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    file
+                                )
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "video/mp4"
+                                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Share MP4 Animation"))
+                            } catch (e: Exception) {
+                                AppLogger.e("EXPORT_SHARE_ERROR", "Failed to share MP4", e)
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share MP4 Animation"))
                         } else {
                             Toast.makeText(context, "Export completed to Movies/FrameForge", Toast.LENGTH_SHORT).show()
                         }
                     }
                 },
-                modifier = Modifier.align(Alignment.TopCenter)
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 28.dp)
             )
         }
 
@@ -562,7 +574,7 @@ fun A2StudioScreen(
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = (-14).dp, y = 56.dp)
+                .offset(x = (-14).dp, y = 78.dp)
         ) {
             A2PhotoInspector(
                 opacity = photoOpacity,
@@ -590,7 +602,9 @@ fun A2StudioScreen(
                     onRemoveNode = { viewModel.deleteGraphNode(it) },
                     onAutoArrange = { viewModel.autoArrangeNodeGraph() },
                     onDone = { currentMode = A2StudioMode.DRAW },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 28.dp)
                 )
             }
             A2StudioMode.VELOCITY -> {
@@ -598,7 +612,9 @@ fun A2StudioScreen(
                     curve = velocityCurveState.curve,
                     onUpdateCurve = { viewModel.updateVelocityCurve(it) },
                     onDone = { currentMode = A2StudioMode.DRAW },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 28.dp)
                 )
             }
             A2StudioMode.GRADE -> {
@@ -606,14 +622,18 @@ fun A2StudioScreen(
                     state = colorGradingState,
                     onStateChange = { viewModel.updateColorGradingState(it) },
                     onDone = { currentMode = A2StudioMode.DRAW },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 28.dp)
                 )
             }
             A2StudioMode.STAGE_3D -> {
                 A2Stage3DOverlay(
                     layers = project.layers,
                     onDone = { currentMode = A2StudioMode.DRAW },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 28.dp)
                 )
             }
             A2StudioMode.DRAW -> { /* Rendered above */ }
@@ -629,7 +649,7 @@ fun A2StudioScreen(
                 onClose = { isPagesPopoverOpen = false },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .offset(x = 14.dp, y = 56.dp)
+                    .offset(x = 14.dp, y = 78.dp)
             )
         }
 
@@ -642,7 +662,7 @@ fun A2StudioScreen(
                 onClose = { isOnionPopoverOpen = false },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = (-60).dp, y = 56.dp)
+                    .offset(x = (-60).dp, y = 78.dp)
             )
         }
 
@@ -659,7 +679,7 @@ fun A2StudioScreen(
                 onClose = { isLayersPopoverOpen = false },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = (-14).dp, y = 56.dp)
+                    .offset(x = (-14).dp, y = 78.dp)
             )
         }
 
